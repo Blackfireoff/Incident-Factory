@@ -1,9 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 from datetime import datetime, date
 from decimal import Decimal
 from database import query_db
+from search_engine import get_opensearch_client, ensure_index, index_incident, search_incidents
 
+INDEX_NAME = "incidents"
 app = FastAPI(title="FireTeams API")
 
 # Fonction pour convertir les datetime, date et Decimal en types JSON-serialisables
@@ -18,6 +20,13 @@ def convert_datetime_to_str(obj):
     elif isinstance(obj, list):
         return [convert_datetime_to_str(item) for item in obj]
     return obj
+
+@app.on_event("startup")
+def setup_search():
+    """S'assure que l'index OpenSearch existe au démarrage"""
+    client = get_opensearch_client()
+    ensure_index(client, INDEX_NAME)
+
 
 @app.get("/")
 async def root():
@@ -263,6 +272,54 @@ async def get_event_details(event_id: int):
                 "message": f"Erreur lors de la récupération des détails de l'événement: {str(e)}"
             }
         )
+
+@app.get("/index")
+async def index(event_id: int | None = Query(None, ge=1), offset: int = 0):
+    # /index            -> tout (paginé)
+    # /index?event_id=5 -> un seul événement
+    if event_id is None:
+        return await get_events(offset)            # réutilise ton handler liste
+    return await get_event_details(event_id)  
+
+@app.post("/opensearch/index/one")
+async def os_index_one(event_id: int = Query(..., ge=1)):
+    """Indexe un événement (event_id) dans OpenSearch"""
+    row = query_db("""
+        SELECT event_id, description, type, classification, start_datetime, end_datetime
+        FROM event WHERE event_id = %s;
+    """, params=(event_id,), fetch_one=True)
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "Event not found"})
+
+    client = get_opensearch_client()
+    ensure_index(client, INDEX_NAME)
+    index_incident(client, INDEX_NAME, row["event_id"], row)
+    return {"status": "indexed", "event_id": row["event_id"]}
+
+@app.post("/opensearch/index/all")
+async def os_index_all(batch: int = 1000, offset: int = 0):
+    """Indexe tous les événements (par batch)"""
+    client = get_opensearch_client()
+    ensure_index(client, INDEX_NAME)
+
+    total = 0
+    while True:
+        rows = query_db("""
+            SELECT event_id, description, type, classification, start_datetime, end_datetime
+            FROM event
+            ORDER BY event_id
+            LIMIT %s OFFSET %s;
+        """, params=(batch, offset))
+        if not rows:
+            break
+        for r in rows:
+            index_incident(client, INDEX_NAME, r["event_id"], r)
+        total += len(rows)
+        offset += len(rows)
+        if len(rows) < batch:
+            break
+    return {"status": "indexed", "count": total}    
+
 
 if __name__ == "__main__":
     import uvicorn
