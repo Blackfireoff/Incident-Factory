@@ -5,6 +5,10 @@ from decimal import Decimal
 from database import query_db
 from fastapi import Request
 from services.bedrock_service import BedrockChatService
+from opensearchpy import OpenSearch
+import boto3
+import numpy as np
+import json
 
 
 from search_engine import get_opensearch_client, ensure_index, index_incident, search_incidents
@@ -25,6 +29,73 @@ def convert_datetime_to_str(obj):
     elif isinstance(obj, list):
         return [convert_datetime_to_str(item) for item in obj]
     return obj
+
+def index_events_in_opensearch(os_client):
+    events = query_db("SELECT event_id, description FROM event WHERE description IS NOT NULL;")
+
+    for ev in events:
+        embedding = generate_embedding(ev["description"])  # fonction à créer (via Bedrock)
+        doc = {
+            "event_id": ev["event_id"],
+            "description": ev["description"],
+            "embedding": embedding
+        }
+        os_client.index(index="events_vector_index", id=ev["event_id"], body=doc)
+
+    print(f"✅ {len(events)} événements indexés dans OpenSearch")
+
+def generate_embedding(text: str):
+    bedrock = boto3.client(service_name="bedrock-runtime", region_name="us-east-1")
+
+    response = bedrock.invoke_model(
+        modelId="amazon.titan-embed-text-v2:0",
+        body=json.dumps({"inputText": text})
+    )
+
+    embedding = json.loads(response["body"].read())["embedding"]
+    return embedding
+
+def search_similar_context(query: str, os_client):
+    query_vector = generate_embedding(query)
+
+    search_body = {
+        "size": 3,  # nombre de documents similaires à renvoyer
+        "query": {
+            "knn": {
+                "embedding": {
+                    "vector": query_vector,
+                    "k": 3
+                }
+            }
+        }
+    }
+
+    response = os_client.search(index="events_vector_index", body=search_body)
+    return [hit["_source"]["description"] for hit in response["hits"]["hits"]]
+
+def answer_question_with_context(question: str):
+    os_client = OpenSearch(hosts=[{"host": "localhost", "port": 9200}])
+    context_docs = search_similar_context(question, os_client)
+
+    context_text = "\n\n".join(context_docs)
+
+    system_prompt = """
+    Tu es un assistant expert en analyse d'évènements.
+    Utilise le contexte fourni pour répondre à la question de manière claire et précise.
+    Si le contexte ne contient pas la réponse, indique-le explicitement.
+    """
+
+    user_prompt = f"Contexte:\n{context_text}\n\nQuestion: {question}"
+
+    response = bedrock.converse(
+        modelId="arn:aws:bedrock:us-east-1:123456789012:inference-profile/meta.llama3-2-11b-instruct-v1",
+        system=[{"text": system_prompt}],
+        messages=[{"role": "user", "content": [{"text": user_prompt}]}],
+        inferenceConfig={"temperature": 0.7, "maxTokens": 1000}
+    )
+
+    return response["output"]["message"]["content"][0]["text"]
+
 
 @app.on_event("startup")
 def setup_search():
@@ -436,7 +507,21 @@ async def os_index_all(batch: int = 1000, offset: int = 0):
         offset += len(rows)
         if len(rows) < batch:
             break
-    return {"status": "indexed", "count": total}    
+    return {"status": "indexed", "count": total}
+
+from fastapi import Request
+
+@app.post("/ai/query")
+async def query_database(request: Request):
+    """Permet de poser une question libre à l'IA sur la base d'évènements"""
+    data = await request.json()
+    question = data.get("question")
+
+    if not question:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Champ 'question' requis"})
+
+    answer = answer_question_with_context(question)
+    return JSONResponse({"status": "success", "question": question, "answer": answer})
 
 
 if __name__ == "__main__":
