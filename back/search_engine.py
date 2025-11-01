@@ -1,6 +1,7 @@
 # search_engine.py
 from opensearchpy import OpenSearch
 import os
+from typing import List, Optional
 
 # --- OpenSearch index & queries (full-text) ---
 
@@ -48,6 +49,7 @@ def index_incident(client, index_name: str, document_id: int, body: dict):
 def search_incidents(client, index_name: str, query: str):
     """Recherche full-text avec multi_match sur description, type, classification"""
     body = {
+        "_source": ["event_id", "type", "classification", "description", "start_datetime", "end_datetime"],
         "query": {
             "multi_match": {
                 "query": query,
@@ -57,5 +59,94 @@ def search_incidents(client, index_name: str, query: str):
             }
         },
         "size": 10
+    }
+    return client.search(index=index_name, body=body)
+
+
+def search_incidents_targeted(client, index_name: str, query: str, must_phrases: list[str], size: int = 3):
+    return search_incidents_with_filters(
+        client=client,
+        index_name=index_name,
+        query=query,
+        must_phrases=must_phrases,
+        size=size,
+        min_score=1.0,
+    )
+
+
+def search_incidents_with_filters(
+    client,
+    index_name: str,
+    query: str,
+    must_phrases: Optional[list[str]] = None,
+    filters: Optional[List[dict]] = None,
+    sort: Optional[List[dict]] = None,
+    size: int = 5,
+    min_score: Optional[float] = None,
+):
+    must_phrases = must_phrases or []
+    must_clauses = []
+    if query:
+        must_clauses.append({
+            "multi_match": {
+                "query": query,
+                "fields": ["description^3", "type^2", "classification"],
+                "operator": "or",
+                "fuzziness": "AUTO"
+            }
+        })
+
+    for p in must_phrases:
+        must_clauses.append({"match_phrase": {"description": p}})
+
+    if not must_clauses:
+        must_clauses.append({"match_all": {}})
+
+    bool_query = {"must": must_clauses}
+    if filters:
+        bool_query["filter"] = filters
+
+    body = {
+        "_source": ["event_id", "type", "classification", "description", "start_datetime", "end_datetime"],
+        "query": {"bool": bool_query},
+        "size": size,
+        "highlight": {
+            "fields": {
+                "description": {
+                    "fragment_size": 220,
+                    "number_of_fragments": 5,
+                    "no_match_size": 0
+                }
+            }
+        }
+    }
+
+    if sort:
+        body["sort"] = sort
+    if min_score is not None:
+        body["min_score"] = min_score
+
+    return client.search(index=index_name, body=body)
+
+
+def search_recent_incidents(client, index_name: str, size: int = 10):
+    """Fallback: récupère les incidents les plus récents par start_datetime."""
+    body = {
+        "_source": ["event_id", "type", "classification", "description", "start_datetime", "end_datetime"],
+        "query": {"match_all": {}},
+        "sort": [
+            {"start_datetime": {"order": "desc", "missing": "_last"}},
+            {"event_id": {"order": "desc"}}
+        ],
+        "size": size,
+        "highlight": {
+            "fields": {
+                "description": {
+                    "fragment_size": 220,
+                    "number_of_fragments": 5,
+                    "no_match_size": 0
+                }
+            }
+        }
     }
     return client.search(index=index_name, body=body)
