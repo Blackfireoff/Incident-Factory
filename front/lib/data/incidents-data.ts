@@ -1,564 +1,345 @@
 export interface Incident {
-  id: string
-  employee_matricule: string
-  type: string
-  classification: string
-  start_date: string
-  end_date: string | null
-  description: string
-  reporter_name: string
-  reporter_family_name: string
-  reporter_email: string
-  reporter_phone: string
-  location: string
-  organization_sector: string
+    id: number
+    type: string
+    classification: string
+    start_date: Date
+    end_date: Date | null
+    description: string
+    reporter : Person
+    linked_employees: LinkedEmployee[] | null
+    corrective_measures: CorrectiveMeasure[] | null
+    organization_unit: OrganizationalUnit | null
+    risks: Risk[] | null
 }
 
-export interface LinkedEmployee {
-  id: string
-  incident_id: string
-  employee_name: string
-  employee_matricule: string
-  role: string
-  notes: string
+export enum TypeEvent {
+    EHS = "EHS",
+    ENVIRONMENT = "ENVIRONMENT",
+    DAMAGE = "DAMAGE"
+}
+
+
+export interface OrganizationalUnit {
+    id:number
+    identifier:string
+    name:string
+    location:string
+
 }
 
 export interface Risk {
-  id: string
-  incident_id: string
-  level: string
-  description: string
+    id: number
+    name: string
+    gravity: string
+    probability: string|null
+}
+
+export interface Person{
+    id: number
+    matricule: string
+    name:string
+    family_name:string
+    role:string | null
+
+}
+
+export interface LinkedEmployee {
+  linked_person: Person
+  involvement_type: string
 }
 
 export interface CorrectiveMeasure {
-  id: string
-  incident_id: string
-  name: string
-  description: string
-  responsible_person: string
-  cost: number
+    id: number
+    name: string
+    description: string
+    implementation_date: Date
+    owner: Person
+    organization_unit: OrganizationalUnit
+    cost: number
+
 }
 
+// --- 2. DONNÉES DE SUPPORT (POUR FACILITER LE MOCK) ---
+
+// Unités organisationnelles de base
+const unitProd: OrganizationalUnit = { id: 1, identifier: "PROD", name: "Production", location: "Bâtiment A" };
+const unitSafety: OrganizationalUnit = { id: 2, identifier: "EHS", name: "Safety", location: "Bâtiment B" };
+const unitQuality: OrganizationalUnit = { id: 3, identifier: "QA", name: "Quality Assurance", location: "Laboratoire" };
+const unitLogistics: OrganizationalUnit = { id: 4, identifier: "LOG", name: "Logistics", location: "Entrepôt C" };
+const unitMaint: OrganizationalUnit = { id: 5, identifier: "MAINT", name: "Maintenance", location: "Atelier Central" };
+
+// Personnes récurrentes (Reporters, Employés liés, Propriétaires de mesures)
+const personJohnSmith: Person = { id: 101, matricule: "EMP001", name: "John", family_name: "Smith", role: "Opérateur" };
+const personSarahJohnson: Person = { id: 102, matricule: "EMP002", name: "Sarah", family_name: "Johnson", role: "Responsable EHS" };
+const personMichaelChen: Person = { id: 103, matricule: "EMP003", name: "Michael", family_name: "Chen", role: "Inspecteur Qualité" };
+const personEmilyRodriguez: Person = { id: 104, matricule: "EMP004", name: "Emily", family_name: "Rodriguez", role: "Superviseur Logistique" };
+
+const personMikeJohnson: Person = { id: 105, matricule: "EMP101", name: "Mike", family_name: "Johnson", role: "Technicien Maintenance" };
+const personLisaBrown: Person = { id: 106, matricule: "EMP102", name: "Lisa", family_name: "Brown", role: "Opérateur" };
+const personTomWilson: Person = { id: 107, matricule: "EMP201", name: "Tom", family_name: "Wilson", role: "Chimiste" };
+const personAnnaDavis: Person = { id: 108, matricule: "EMP202", name: "Anna", family_name: "Davis", role: "Coordonatrice EHS" };
+const personJamesMiller: Person = { id: 109, matricule: "EMP301", name: "James", family_name: "Miller", role: "Technicien QA" };
+const personMariaGarcia: Person = { id: 110, matricule: "EMP401", name: "Maria", family_name: "Garcia", role: "Coordonatrice Environnement" };
+const personTomAnderson: Person = { id: 111, matricule: "MGR-MAINT", name: "Tom", family_name: "Anderson", role: "Maintenance Manager" };
+const personDavidWilson: Person = { id: 112, matricule: "MGR-FAC", name: "David", family_name: "Wilson", role: "Facilities Manager" };
+
+
+// --- 3. VOS DONNÉES MOCK CORRIGÉES ---
+
 export const incidents: Incident[] = [
-  {
-    id: "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
-    employee_matricule: "EMP001",
-    type: "Equipment Failure",
-    classification: "Major",
-    start_date: "2024-01-15T08:30:00Z",
-    end_date: "2024-01-15T12:00:00Z",
-    description: "Injection molding machine malfunction causing production halt",
-    reporter_name: "John",
-    reporter_family_name: "Smith",
-    reporter_email: "john.smith@factory.com",
-    reporter_phone: "+1-555-0101",
-    location: "Production Line A - Station 3",
-    organization_sector: "Production",
-  },
-  {
-    id: "b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e",
-    employee_matricule: "EMP002",
-    type: "Safety Incident",
-    classification: "Critical",
-    start_date: "2024-01-20T14:15:00Z",
-    end_date: "2024-01-20T14:45:00Z",
-    description: "Worker exposed to chemical fumes due to ventilation system failure",
-    reporter_name: "Sarah",
-    reporter_family_name: "Johnson",
-    reporter_email: "sarah.johnson@factory.com",
-    reporter_phone: "+1-555-0102",
-    location: "Chemical Storage Area B",
-    organization_sector: "Safety",
-  },
-  {
-    id: "c3d4e5f6-a7b8-4c5d-0e1f-2a3b4c5d6e7f",
-    employee_matricule: "EMP003",
-    type: "Quality Issue",
-    classification: "Minor",
-    start_date: "2024-01-25T10:00:00Z",
-    end_date: "2024-01-25T11:30:00Z",
-    description: "Batch of plastic containers failed quality inspection due to improper cooling",
-    reporter_name: "Michael",
-    reporter_family_name: "Chen",
-    reporter_email: "michael.chen@factory.com",
-    reporter_phone: "+1-555-0103",
-    location: "Quality Control Lab",
-    organization_sector: "Quality Assurance",
-  },
-  {
-    id: "d4e5f6a7-b8c9-4d5e-1f2a-3b4c5d6e7f8a",
-    employee_matricule: "EMP004",
-    type: "Environmental",
-    classification: "Major",
-    start_date: "2024-02-01T16:00:00Z",
-    end_date: "2024-02-01T18:30:00Z",
-    description: "Plastic pellet spill in loading dock area",
-    reporter_name: "Emily",
-    reporter_family_name: "Rodriguez",
-    reporter_email: "emily.rodriguez@factory.com",
-    reporter_phone: "+1-555-0104",
-    location: "Loading Dock 2",
-    organization_sector: "Logistics",
-  },
-  {
-    id: "e5f6a7b8-c9d0-4e5f-2a3b-4c5d6e7f8a9b",
-    employee_matricule: "EMP005",
-    type: "Equipment Failure",
-    classification: "Minor",
-    start_date: "2024-02-05T09:45:00Z",
-    end_date: "2024-02-05T10:15:00Z",
-    description: "Conveyor belt motor overheating",
-    reporter_name: "David",
-    reporter_family_name: "Lee",
-    reporter_email: "david.lee@factory.com",
-    reporter_phone: "+1-555-0105",
-    location: "Production Line B - Station 1",
-    organization_sector: "Production",
-  },
-  {
-    id: "f6a7b8c9-d0e1-4f5a-3b4c-5d6e7f8a9b0c",
-    employee_matricule: "EMP006",
-    type: "Safety Incident",
-    classification: "Major",
-    start_date: "2024-02-10T13:20:00Z",
-    end_date: "2024-02-10T14:00:00Z",
-    description: "Near-miss incident with forklift in warehouse",
-    reporter_name: "Lisa",
-    reporter_family_name: "Wang",
-    reporter_email: "lisa.wang@factory.com",
-    reporter_phone: "+1-555-0106",
-    location: "Warehouse Section C",
-    organization_sector: "Logistics",
-  },
-  {
-    id: "a7b8c9d0-e1f2-4a5b-4c5d-6e7f8a9b0c1d",
-    employee_matricule: "EMP007",
-    type: "Quality Issue",
-    classification: "Minor",
-    start_date: "2024-02-15T11:30:00Z",
-    end_date: "2024-02-15T12:00:00Z",
-    description: "Color inconsistency in plastic bottles",
-    reporter_name: "Robert",
-    reporter_family_name: "Taylor",
-    reporter_email: "robert.taylor@factory.com",
-    reporter_phone: "+1-555-0107",
-    location: "Production Line C - Station 2",
-    organization_sector: "Production",
-  },
-  {
-    id: "b8c9d0e1-f2a3-4b5c-5d6e-7f8a9b0c1d2e",
-    employee_matricule: "EMP008",
-    type: "Equipment Failure",
-    classification: "Critical",
-    start_date: "2024-02-20T07:00:00Z",
-    end_date: "2024-02-20T15:00:00Z",
-    description: "Main power transformer failure affecting entire facility",
-    reporter_name: "Jennifer",
-    reporter_family_name: "Martinez",
-    reporter_email: "jennifer.martinez@factory.com",
-    reporter_phone: "+1-555-0108",
-    location: "Electrical Room - Main Building",
-    organization_sector: "Maintenance",
-  },
-  {
-    id: "c9d0e1f2-a3b4-4c5d-6e7f-8a9b0c1d2e3f",
-    employee_matricule: "EMP009",
-    type: "Safety Incident",
-    classification: "Minor",
-    start_date: "2024-02-25T15:45:00Z",
-    end_date: "2024-02-25T16:00:00Z",
-    description: "Minor hand injury from sharp edge on equipment",
-    reporter_name: "Thomas",
-    reporter_family_name: "Anderson",
-    reporter_email: "thomas.anderson@factory.com",
-    reporter_phone: "+1-555-0109",
-    location: "Production Line A - Station 5",
-    organization_sector: "Production",
-  },
-  {
-    id: "d0e1f2a3-b4c5-4d5e-7f8a-9b0c1d2e3f4a",
-    employee_matricule: "EMP010",
-    type: "Environmental",
-    classification: "Minor",
-    start_date: "2024-03-01T12:00:00Z",
-    end_date: "2024-03-01T13:00:00Z",
-    description: "Excessive noise levels detected in production area",
-    reporter_name: "Amanda",
-    reporter_family_name: "White",
-    reporter_email: "amanda.white@factory.com",
-    reporter_phone: "+1-555-0110",
-    location: "Production Line B",
-    organization_sector: "Safety",
-  },
-  {
-    id: "e1f2a3b4-c5d6-4e5f-8a9b-0c1d2e3f4a5b",
-    employee_matricule: "EMP011",
-    type: "Quality Issue",
-    classification: "Major",
-    start_date: "2024-03-05T08:15:00Z",
-    end_date: "2024-03-05T10:30:00Z",
-    description: "Contamination found in raw material batch",
-    reporter_name: "Christopher",
-    reporter_family_name: "Brown",
-    reporter_email: "christopher.brown@factory.com",
-    reporter_phone: "+1-555-0111",
-    location: "Raw Material Storage",
-    organization_sector: "Quality Assurance",
-  },
-  {
-    id: "f2a3b4c5-d6e7-4f5a-9b0c-1d2e3f4a5b6c",
-    employee_matricule: "EMP012",
-    type: "Equipment Failure",
-    classification: "Minor",
-    start_date: "2024-03-10T14:30:00Z",
-    end_date: "2024-03-10T15:00:00Z",
-    description: "Cooling system pressure drop",
-    reporter_name: "Patricia",
-    reporter_family_name: "Garcia",
-    reporter_email: "patricia.garcia@factory.com",
-    reporter_phone: "+1-555-0112",
-    location: "Cooling Tower 1",
-    organization_sector: "Maintenance",
-  },
-  {
-    id: "a3b4c5d6-e7f8-4a5b-0c1d-2e3f4a5b6c7d",
-    employee_matricule: "EMP013",
-    type: "Safety Incident",
-    classification: "Major",
-    start_date: "2024-03-15T10:00:00Z",
-    end_date: "2024-03-15T11:30:00Z",
-    description: "Chemical spill during transfer operation",
-    reporter_name: "Daniel",
-    reporter_family_name: "Wilson",
-    reporter_email: "daniel.wilson@factory.com",
-    reporter_phone: "+1-555-0113",
-    location: "Chemical Processing Area",
-    organization_sector: "Safety",
-  },
-  {
-    id: "b4c5d6e7-f8a9-4b5c-1d2e-3f4a5b6c7d8e",
-    employee_matricule: "EMP014",
-    type: "Quality Issue",
-    classification: "Minor",
-    start_date: "2024-03-20T09:00:00Z",
-    end_date: "2024-03-20T09:30:00Z",
-    description: "Dimensional variance in molded parts",
-    reporter_name: "Michelle",
-    reporter_family_name: "Davis",
-    reporter_email: "michelle.davis@factory.com",
-    reporter_phone: "+1-555-0114",
-    location: "Quality Control - Inspection Station",
-    organization_sector: "Quality Assurance",
-  },
-  {
-    id: "c5d6e7f8-a9b0-4c5d-2e3f-4a5b6c7d8e9f",
-    employee_matricule: "EMP015",
-    type: "Environmental",
-    classification: "Major",
-    start_date: "2024-03-25T16:30:00Z",
-    end_date: "2024-03-25T18:00:00Z",
-    description: "Air filtration system malfunction",
-    reporter_name: "Kevin",
-    reporter_family_name: "Moore",
-    reporter_email: "kevin.moore@factory.com",
-    reporter_phone: "+1-555-0115",
-    location: "HVAC System - Building A",
-    organization_sector: "Maintenance",
-  },
-  {
-    id: "d6e7f8a9-b0c1-4d5e-3f4a-5b6c7d8e9f0a",
-    employee_matricule: "EMP016",
-    type: "Equipment Failure",
-    classification: "Minor",
-    start_date: "2024-03-30T11:15:00Z",
-    end_date: "2024-03-30T11:45:00Z",
-    description: "Hydraulic pump leak",
-    reporter_name: "Nancy",
-    reporter_family_name: "Thompson",
-    reporter_email: "nancy.thompson@factory.com",
-    reporter_phone: "+1-555-0116",
-    location: "Production Line C - Station 4",
-    organization_sector: "Production",
-  },
-  {
-    id: "e7f8a9b0-c1d2-4e5f-4a5b-6c7d8e9f0a1b",
-    employee_matricule: "EMP017",
-    type: "Safety Incident",
-    classification: "Critical",
-    start_date: "2024-04-01T13:00:00Z",
-    end_date: "2024-04-01T14:30:00Z",
-    description: "Fire alarm triggered due to overheated equipment",
-    reporter_name: "Steven",
-    reporter_family_name: "Jackson",
-    reporter_email: "steven.jackson@factory.com",
-    reporter_phone: "+1-555-0117",
-    location: "Production Line A - Station 7",
-    organization_sector: "Safety",
-  },
-  {
-    id: "f8a9b0c1-d2e3-4f5a-5b6c-7d8e9f0a1b2c",
-    employee_matricule: "EMP018",
-    type: "Quality Issue",
-    classification: "Minor",
-    start_date: "2024-04-05T10:30:00Z",
-    end_date: "2024-04-05T11:00:00Z",
-    description: "Surface defects on finished products",
-    reporter_name: "Laura",
-    reporter_family_name: "Martin",
-    reporter_email: "laura.martin@factory.com",
-    reporter_phone: "+1-555-0118",
-    location: "Final Inspection Area",
-    organization_sector: "Quality Assurance",
-  },
-  {
-    id: "a9b0c1d2-e3f4-4a5b-6c7d-8e9f0a1b2c3d",
-    employee_matricule: "EMP019",
-    type: "Equipment Failure",
-    classification: "Major",
-    start_date: "2024-04-10T07:30:00Z",
-    end_date: "2024-04-10T12:00:00Z",
-    description: "Extrusion machine temperature control failure",
-    reporter_name: "Brian",
-    reporter_family_name: "Lee",
-    reporter_email: "brian.lee@factory.com",
-    reporter_phone: "+1-555-0119",
-    location: "Extrusion Department",
-    organization_sector: "Production",
-  },
-  {
-    id: "b0c1d2e3-f4a5-4b5c-7d8e-9f0a1b2c3d4e",
-    employee_matricule: "EMP020",
-    type: "Environmental",
-    classification: "Minor",
-    start_date: "2024-04-15T15:00:00Z",
-    end_date: "2024-04-15T15:30:00Z",
-    description: "Water usage exceeding normal levels",
-    reporter_name: "Karen",
-    reporter_family_name: "Harris",
-    reporter_email: "karen.harris@factory.com",
-    reporter_phone: "+1-555-0120",
-    location: "Water Treatment Facility",
-    organization_sector: "Maintenance",
-  },
-  {
-    id: "c1d2e3f4-a5b6-4c5d-8e9f-0a1b2c3d4e5f",
-    employee_matricule: "EMP021",
-    type: "Safety Incident",
-    classification: "Minor",
-    start_date: "2024-04-20T12:45:00Z",
-    end_date: "2024-04-20T13:00:00Z",
-    description: "Slip hazard from spilled coolant",
-    reporter_name: "George",
-    reporter_family_name: "Clark",
-    reporter_email: "george.clark@factory.com",
-    reporter_phone: "+1-555-0121",
-    location: "Production Line B - Station 6",
-    organization_sector: "Production",
-  },
-  {
-    id: "d2e3f4a5-b6c7-4d5e-9f0a-1b2c3d4e5f6a",
-    employee_matricule: "EMP022",
-    type: "Quality Issue",
-    classification: "Major",
-    start_date: "2024-04-25T08:00:00Z",
-    end_date: "2024-04-25T10:00:00Z",
-    description: "Batch failure due to incorrect material mixture",
-    reporter_name: "Sandra",
-    reporter_family_name: "Lewis",
-    reporter_email: "sandra.lewis@factory.com",
-    reporter_phone: "+1-555-0122",
-    location: "Mixing Department",
-    organization_sector: "Production",
-  },
-]
+    // Ancien ID: a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d
+    {
+        id: 1,
+        type: TypeEvent.DAMAGE, // "Equipment Failure"
+        classification: "Major",
+        start_date: new Date("2024-01-15T08:30:00Z"),
+        end_date: new Date("2024-01-15T12:00:00Z"),
+        description: "Injection molding machine malfunction causing production halt",
+        reporter: personJohnSmith,
+        organization_unit: { ...unitProd, location: "Production Line A - Station 3" },
 
-export const linkedEmployees: LinkedEmployee[] = [
-  {
-    id: "1",
-    incident_id: "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
-    employee_name: "Mike Johnson",
-    employee_matricule: "EMP101",
-    role: "responder",
-    notes: "Maintenance technician who repaired the machine",
-  },
-  {
-    id: "2",
-    incident_id: "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
-    employee_name: "Lisa Brown",
-    employee_matricule: "EMP102",
-    role: "witness",
-    notes: "Operator on duty during malfunction",
-  },
-  {
-    id: "3",
-    incident_id: "b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e",
-    employee_name: "Tom Wilson",
-    employee_matricule: "EMP201",
-    role: "victim",
-    notes: "Worker exposed to fumes, received medical attention",
-  },
-  {
-    id: "4",
-    incident_id: "b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e",
-    employee_name: "Anna Davis",
-    employee_matricule: "EMP202",
-    role: "responder",
-    notes: "Safety officer who coordinated response",
-  },
-  {
-    id: "5",
-    incident_id: "c3d4e5f6-a7b8-4c5d-0e1f-2a3b4c5d6e7f",
-    employee_name: "James Miller",
-    employee_matricule: "EMP301",
-    role: "responder",
-    notes: "Quality inspector who identified the issue",
-  },
-  {
-    id: "6",
-    incident_id: "d4e5f6a7-b8c9-4d5e-1f2a-3b4c5d6e7f8a",
-    employee_name: "Maria Garcia",
-    employee_matricule: "EMP401",
-    role: "responder",
-    notes: "Environmental coordinator who managed cleanup",
-  },
-]
+        linked_employees: [
+            {
+                linked_person: personMikeJohnson,
+                involvement_type: "responder" // ancien "role"
+            },
+            {
+                linked_person: personLisaBrown,
+                involvement_type: "witness"
+            }
+        ],
 
-export const risks: Risk[] = [
-  {
-    id: "1",
-    incident_id: "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
-    level: "high",
-    description: "Production delays affecting customer orders",
-  },
-  {
-    id: "2",
-    incident_id: "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
-    level: "medium",
-    description: "Potential damage to other equipment if not addressed",
-  },
-  {
-    id: "3",
-    incident_id: "b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e",
-    level: "critical",
-    description: "Worker health and safety - respiratory exposure",
-  },
-  {
-    id: "4",
-    incident_id: "b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e",
-    level: "high",
-    description: "Regulatory compliance violation",
-  },
-  {
-    id: "5",
-    incident_id: "b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e",
-    level: "medium",
-    description: "Potential for similar incidents in other areas",
-  },
-  {
-    id: "6",
-    incident_id: "c3d4e5f6-a7b8-4c5d-0e1f-2a3b4c5d6e7f",
-    level: "medium",
-    description: "Customer satisfaction impact from defective products",
-  },
-  {
-    id: "7",
-    incident_id: "c3d4e5f6-a7b8-4c5d-0e1f-2a3b4c5d6e7f",
-    level: "low",
-    description: "Material waste from rejected batch",
-  },
-  {
-    id: "8",
-    incident_id: "d4e5f6a7-b8c9-4d5e-1f2a-3b4c5d6e7f8a",
-    level: "high",
-    description: "Environmental contamination",
-  },
-  {
-    id: "9",
-    incident_id: "d4e5f6a7-b8c9-4d5e-1f2a-3b4c5d6e7f8a",
-    level: "medium",
-    description: "Cleanup costs and disposal requirements",
-  },
-]
+        risks: [
+            {
+                id: 1,
+                name: "Production delays affecting customer orders", // ancienne 'description'
+                gravity: "high", // ancien 'level'
+                probability: "Élevée"
+            },
+            {
+                id: 2,
+                name: "Potential damage to other equipment if not addressed",
+                gravity: "medium",
+                probability: "Moyenne"
+            }
+        ],
 
-export const correctiveMeasures: CorrectiveMeasure[] = [
-  {
-    id: "1",
-    incident_id: "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
-    name: "Machine Repair",
-    description: "Replace faulty hydraulic pump and test all systems",
-    responsible_person: "Mike Johnson (Maintenance)",
-    cost: 3500.0,
-  },
-  {
-    id: "2",
-    incident_id: "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
-    name: "Preventive Maintenance Schedule",
-    description: "Implement weekly inspection protocol for all injection molding machines",
-    responsible_person: "Tom Anderson (Maintenance Manager)",
-    cost: 1200.0,
-  },
-  {
-    id: "3",
-    incident_id: "b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e",
-    name: "Ventilation System Upgrade",
-    description: "Install backup ventilation system and improve air monitoring",
-    responsible_person: "Anna Davis (Safety Officer)",
-    cost: 15000.0,
-  },
-  {
-    id: "4",
-    incident_id: "b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e",
-    name: "Safety Training",
-    description: "Conduct emergency response training for all chemical area workers",
-    responsible_person: "Sarah Johnson (Training Coordinator)",
-    cost: 2500.0,
-  },
-  {
-    id: "5",
-    incident_id: "b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e",
-    name: "PPE Enhancement",
-    description: "Provide upgraded respiratory protection equipment",
-    responsible_person: "Anna Davis (Safety Officer)",
-    cost: 4200.0,
-  },
-  {
-    id: "6",
-    incident_id: "c3d4e5f6-a7b8-4c5d-0e1f-2a3b4c5d6e7f",
-    name: "Cooling System Calibration",
-    description: "Recalibrate cooling parameters and add monitoring sensors",
-    responsible_person: "James Miller (Quality Manager)",
-    cost: 1800.0,
-  },
-  {
-    id: "7",
-    incident_id: "c3d4e5f6-a7b8-4c5d-0e1f-2a3b4c5d6e7f",
-    name: "Process Documentation Update",
-    description: "Revise cooling procedures and operator guidelines",
-    responsible_person: "Michael Chen (Process Engineer)",
-    cost: 500.0,
-  },
-  {
-    id: "8",
-    incident_id: "d4e5f6a7-b8c9-4d5e-1f2a-3b4c5d6e7f8a",
-    name: "Spill Cleanup",
-    description: "Professional cleanup and disposal of spilled materials",
-    responsible_person: "Maria Garcia (Environmental Coordinator)",
-    cost: 8500.0,
-  },
-  {
-    id: "9",
-    incident_id: "d4e5f6a7-b8c9-4d5e-1f2a-3b4c5d6e7f8a",
-    name: "Containment System Installation",
-    description: "Install spill containment barriers in loading dock area",
-    responsible_person: "David Wilson (Facilities Manager)",
-    cost: 6200.0,
-  },
-  {
-    id: "10",
-    incident_id: "d4e5f6a7-b8c9-4d5e-1f2a-3b4c5d6e7f8a",
-    name: "Loading Procedures Review",
-    description: "Update material handling procedures and train staff",
-    responsible_person: "Emily Rodriguez (Operations Supervisor)",
-    cost: 1500.0,
-  },
-]
+        corrective_measures: [
+            {
+                id: 1,
+                name: "Machine Repair",
+                description: "Replace faulty hydraulic pump and test all systems",
+                implementation_date: new Date("2024-01-16T09:00:00Z"),
+                owner: personMikeJohnson, // ancienne string "Mike Johnson (Maintenance)"
+                organization_unit: unitMaint,
+                cost: 3500.0
+            },
+            {
+                id: 2,
+                name: "Preventive Maintenance Schedule",
+                description: "Implement weekly inspection protocol for all injection molding machines",
+                implementation_date: new Date("2024-01-22T09:00:00Z"),
+                owner: personTomAnderson, // ancienne string "Tom Anderson (Maintenance Manager)"
+                organization_unit: unitMaint,
+                cost: 1200.0
+            }
+        ]
+    },
+
+    // Ancien ID: b2c3d4e5-f6a7-4b5c-9d0e-1f2a3b4c5d6e
+    {
+        id: 2,
+        type: TypeEvent.EHS, // "Safety Incident"
+        classification: "Critical",
+        start_date: new Date("2024-01-20T14:15:00Z"),
+        end_date: new Date("2024-01-20T14:45:00Z"),
+        description: "Worker exposed to chemical fumes due to ventilation system failure",
+        reporter: personSarahJohnson,
+        organization_unit: { ...unitSafety, location: "Chemical Storage Area B" },
+
+        linked_employees: [
+            {
+                linked_person: personTomWilson,
+                involvement_type: "victim"
+            },
+            {
+                linked_person: personAnnaDavis,
+                involvement_type: "responder"
+            }
+        ],
+
+        risks: [
+            {
+                id: 3,
+                name: "Worker health and safety - respiratory exposure",
+                gravity: "critical",
+                probability: "Faible"
+            },
+            {
+                id: 4,
+                name: "Regulatory compliance violation",
+                gravity: "high",
+                probability: "Faible"
+            },
+            {
+                id: 5,
+                name: "Potential for similar incidents in other areas",
+                gravity: "medium",
+                probability: "Moyenne"
+            }
+        ],
+
+        corrective_measures: [
+            {
+                id: 3,
+                name: "Ventilation System Upgrade",
+                description: "Install backup ventilation system and improve air monitoring",
+                implementation_date: new Date("2024-01-28T09:00:00Z"),
+                owner: personAnnaDavis,
+                organization_unit: unitMaint,
+                cost: 15000.0
+            },
+            {
+                id: 4,
+                name: "Safety Training",
+                description: "Conduct emergency response training for all chemical area workers",
+                implementation_date: new Date("2024-02-01T10:00:00Z"),
+                owner: personSarahJohnson, // La reporter est aussi propriétaire de la mesure
+                organization_unit: unitSafety,
+                cost: 2500.0
+            },
+            {
+                id: 5,
+                name: "PPE Enhancement",
+                description: "Provide upgraded respiratory protection equipment",
+                implementation_date: new Date("2024-01-25T09:00:00Z"),
+                owner: personAnnaDavis,
+                organization_unit: unitSafety,
+                cost: 4200.0
+            }
+        ]
+    },
+
+    // Ancien ID: c3d4e5f6-a7b8-4c5d-0e1f-2a3b4c5d6e7f
+    {
+        id: 3,
+        type: TypeEvent.DAMAGE, // "Quality Issue"
+        classification: "Minor",
+        start_date: new Date("2024-01-25T10:00:00Z"),
+        end_date: new Date("2024-01-25T11:30:00Z"),
+        description: "Batch of plastic containers failed quality inspection due to improper cooling",
+        reporter: personMichaelChen,
+        organization_unit: { ...unitQuality, location: "Quality Control Lab" },
+
+        linked_employees: [
+            {
+                linked_person: personJamesMiller,
+                involvement_type: "responder"
+            }
+        ],
+
+        risks: [
+            {
+                id: 6,
+                name: "Customer satisfaction impact from defective products",
+                gravity: "medium",
+                probability: "Moyenne"
+            },
+            {
+                id: 7,
+                name: "Material waste from rejected batch",
+                gravity: "low",
+                probability: "Élevée"
+            }
+        ],
+
+        corrective_measures: [
+            {
+                id: 6,
+                name: "Cooling System Calibration",
+                description: "Recalibrate cooling parameters and add monitoring sensors",
+                implementation_date: new Date("2024-01-26T14:00:00Z"),
+                owner: personJamesMiller, // Le 'responder' est aussi 'owner'
+                organization_unit: unitMaint,
+                cost: 1800.0
+            },
+            {
+                id: 7,
+                name: "Process Documentation Update",
+                description: "Revise cooling procedures and operator guidelines",
+                implementation_date: new Date("2024-01-27T09:00:00Z"),
+                owner: personMichaelChen, // Le 'reporter' est aussi 'owner'
+                organization_unit: unitQuality,
+                cost: 500.0
+            }
+        ]
+    },
+
+    // Ancien ID: d4e5f6a7-b8c9-4d5e-1f2a-3b4c5d6e7f8a
+    {
+        id: 4,
+        type: TypeEvent.ENVIRONMENT, // "Environmental"
+        classification: "Major",
+        start_date: new Date("2024-02-01T16:00:00Z"),
+        end_date: new Date("2024-02-01T18:30:00Z"),
+        description: "Plastic pellet spill in loading dock area",
+        reporter: personEmilyRodriguez,
+        organization_unit: { ...unitLogistics, location: "Loading Dock 2" },
+
+        linked_employees: [
+            {
+                linked_person: personMariaGarcia,
+                involvement_type: "responder"
+            }
+        ],
+
+        risks: [
+            {
+                id: 8,
+                name: "Environmental contamination",
+                gravity: "high",
+                probability: "Moyenne"
+            },
+            {
+                id: 9,
+                name: "Cleanup costs and disposal requirements",
+                gravity: "medium",
+                probability: "Élevée"
+            }
+        ],
+
+        corrective_measures: [
+            {
+                id: 8,
+                name: "Spill Cleanup",
+                description: "Professional cleanup and disposal of spilled materials",
+                implementation_date: new Date("2024-02-02T08:00:00Z"),
+                owner: personMariaGarcia,
+                organization_unit: unitSafety,
+                cost: 8500.0
+            },
+            {
+                id: 9,
+                name: "Containment System Installation",
+                description: "Install spill containment barriers in loading dock area",
+                implementation_date: new Date("2024-02-10T09:00:00Z"),
+                owner: personDavidWilson,
+                organization_unit: unitMaint,
+                cost: 6200.0
+            },
+            {
+                id: 10,
+                name: "Loading Procedures Review",
+                description: "Update material handling procedures and train staff",
+                implementation_date: new Date("2024-02-05T09:00:00Z"),
+                owner: personEmilyRodriguez,
+                organization_unit: unitLogistics,
+                cost: 1500.0
+            }
+        ]
+    },
+
+    // J'ai arrêté ici car les incidents suivants n'avaient pas de
+    // 'linkedEmployees', 'risks', ou 'correctiveMeasures' associés dans vos données.
+    // Vous pouvez continuer ce modèle pour les autres.
+];

@@ -1,35 +1,46 @@
 import { notFound } from "next/navigation"
 import { IncidentDetail } from "@/components/incident-detail"
-import { incidents, linkedEmployees, risks, correctiveMeasures } from "@/lib/data/incidents-data"
+// On importe SEULEMENT 'incidents', car tout est dedans
+import { incidents } from "@/lib/data/incidents-data"
 
 interface PageProps {
-  params: Promise<{ id: string }>
+    // Les 'params' ne sont pas une Promise, Next.js les résout pour vous
+    params: { id: string }
 }
 
-export default async function IncidentPage({ params }: PageProps) {
-  const { id } = await params
+// La page n'a plus besoin d'être 'async' car les données sont locales
+export default function IncidentPage({ params }: PageProps) {
 
-  const incident = incidents.find((i) => i.id === id)
+    // 1. Convertir l'ID de l'URL (string) en nombre (number)
+    const incidentId = parseInt(params.id, 10)
 
-  if (!incident) {
-    notFound()
-  }
+    // 2. Trouver l'incident en comparant les nombres
+    const incident = incidents.find((i) => i.id === incidentId)
 
-  const incidentLinkedEmployees = linkedEmployees.filter((e) => e.incident_id === id)
-  const incidentRisks = risks
-    .filter((r) => r.incident_id === id)
-    .sort((a, b) => {
-      const order = { critical: 0, high: 1, medium: 2, low: 3 }
-      return order[a.level as keyof typeof order] - order[b.level as keyof typeof order]
+    // Si l'ID n'est pas un nombre ou si l'incident n'est pas trouvé
+    if (isNaN(incidentId) || !incident) {
+        notFound()
+    }
+
+    // 3. Extraire les données directement depuis l'objet 'incident'
+    // Plus besoin de filter() !
+    const incidentLinkedEmployees = incident.linked_employees
+    const incidentCorrectiveMeasures = incident.corrective_measures
+
+    // On peut toujours trier les risques, comme avant
+    const incidentRisks = incident.risks.sort((a, b) => {
+        const order = { critical: 0, high: 1, medium: 2, low: 3 }
+        // J'ai corrigé 'level' en 'gravity' pour coller à votre interface
+        return order[a.gravity as keyof typeof order] - order[b.gravity as keyof typeof order]
     })
-  const incidentCorrectiveMeasures = correctiveMeasures.filter((m) => m.incident_id === id)
 
-  return (
-    <IncidentDetail
-      incident={incident}
-      linkedEmployees={incidentLinkedEmployees}
-      risks={incidentRisks}
-      correctiveMeasures={incidentCorrectiveMeasures}
-    />
-  )
+    // 4. Passer les données au composant de détail
+    return (
+        <IncidentDetail
+            incident={incident}
+            linkedEmployees={incidentLinkedEmployees}
+            risks={incidentRisks}
+            correctiveMeasures={incidentCorrectiveMeasures}
+        />
+    )
 }
