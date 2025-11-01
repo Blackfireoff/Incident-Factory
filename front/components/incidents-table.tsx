@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { AdvancedFilters } from "@/components/advanced-filters"
 import { incidents as allIncidents, type Incident } from "@/lib/data/incidents-data"
+import {getTypeColor} from "@/lib/utils";
 
 interface IncidentsTableProps {
     totalCount: number
@@ -135,18 +136,6 @@ export function IncidentsTable({ totalCount: initialCount }: IncidentsTableProps
 
     const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE)
 
-    const getClassificationColor = (classification: string) => {
-        switch (classification.toLowerCase()) {
-            case "critical":
-                return "bg-red-100 text-red-800 border-red-300"
-            case "major":
-                return "bg-orange-100 text-orange-800 border-orange-300"
-            case "minor":
-                return "bg-yellow-100 text-yellow-800 border-yellow-300"
-            default:
-                return "bg-gray-100 text-gray-800 border-gray-300"
-        }
-    }
 
     const handleSearch = (value: string) => {
         setSearchTerm(value)
@@ -167,15 +156,6 @@ export function IncidentsTable({ totalCount: initialCount }: IncidentsTableProps
             <CardContent>
                 <div className="mb-6 space-y-4">
                     <div className="flex gap-2">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Search by reporter, type, classification, or description..."
-                                value={searchTerm}
-                                onChange={(e) => handleSearch(e.target.value)}
-                                className="pl-10"
-                            />
-                        </div>
                         <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
                             <Filter className="h-4 w-4 mr-2" />
                             {showFilters ? "Hide Filters" : "Show Filters"}
@@ -223,9 +203,11 @@ export function IncidentsTable({ totalCount: initialCount }: IncidentsTableProps
                                                 <div className="text-xs text-muted-foreground">{incident.reporter.matricule}</div>
                                             </TableCell>
 
-                                            <TableCell>{incident.type}</TableCell>
+                                            <TableCell><Badge variant="outline" className={getTypeColor(incident.type)}>
+                                                {incident.type}
+                                            </Badge></TableCell>
                                             <TableCell>
-                                                <Badge variant="outline" className={getClassificationColor(incident.classification)}>
+                                                <Badge variant="secondary" className="bg-primary/10 text-primary">
                                                     {incident.classification}
                                                 </Badge>
                                             </TableCell>

@@ -64,17 +64,17 @@ export function Chatbot() {
           isOpen ? "scale-100 opacity-100" : "scale-0 opacity-0",
         )}
       >
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 bg-primary text-primary-foreground rounded-t-lg">
-          <CardTitle className="text-lg font-semibold">Support Assistant</CardTitle>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsOpen(false)}
-            className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </CardHeader>
+          <div className="flex flex-row items-center justify-between px-4 py-3 bg-primary text-primary-foreground rounded-t-lg">
+              <CardTitle className="text-lg font-semibold">Support Assistant</CardTitle>
+              <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsOpen(false)}
+                  className="h-8 w-8 text-primary-foreground hover:bg-primary-foreground/20"
+              >
+                  <X className="h-4 w-4" />
+              </Button>
+          </div>
         <CardContent className="p-4">
           {/* Messages */}
           <div className="h-80 overflow-y-auto mb-4 space-y-3">
