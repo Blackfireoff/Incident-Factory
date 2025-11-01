@@ -5,8 +5,9 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: events
-      POSTGRES_HOST_AUTH_METHOD: trust  # Pas de mot de passe
+      POSTGRES_HOST_AUTH_METHOD: md5
     ports:
       - "5432:5432"
     volumes:
@@ -22,6 +23,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    environment:
+      PGPASSWORD: postgres
     volumes:
       - ./events.backup:/backup/events.backup:ro
     entrypoint: >
