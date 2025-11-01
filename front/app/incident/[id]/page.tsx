@@ -1,6 +1,6 @@
-import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
 import { IncidentDetail } from "@/components/incident-detail"
+import { incidents, linkedEmployees, risks, correctiveMeasures } from "@/lib/data/incidents-data"
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -8,42 +8,28 @@ interface PageProps {
 
 export default async function IncidentPage({ params }: PageProps) {
   const { id } = await params
-  const supabase = await createClient()
 
-  // Fetch incident with all related data
-  const { data: incident, error: incidentError } = await supabase.from("incidents").select("*").eq("id", id).single()
+  const incident = incidents.find((i) => i.id === id)
 
-  if (incidentError || !incident) {
+  if (!incident) {
     notFound()
   }
 
-  // Fetch linked employees
-  const { data: linkedEmployees } = await supabase
-    .from("linked_employees")
-    .select("*")
-    .eq("incident_id", id)
-    .order("created_at", { ascending: true })
-
-  // Fetch risks
-  const { data: risks } = await supabase
-    .from("risks")
-    .select("*")
-    .eq("incident_id", id)
-    .order("level", { ascending: true })
-
-  // Fetch corrective measures
-  const { data: correctiveMeasures } = await supabase
-    .from("corrective_measures")
-    .select("*")
-    .eq("incident_id", id)
-    .order("created_at", { ascending: true })
+  const incidentLinkedEmployees = linkedEmployees.filter((e) => e.incident_id === id)
+  const incidentRisks = risks
+    .filter((r) => r.incident_id === id)
+    .sort((a, b) => {
+      const order = { critical: 0, high: 1, medium: 2, low: 3 }
+      return order[a.level as keyof typeof order] - order[b.level as keyof typeof order]
+    })
+  const incidentCorrectiveMeasures = correctiveMeasures.filter((m) => m.incident_id === id)
 
   return (
     <IncidentDetail
       incident={incident}
-      linkedEmployees={linkedEmployees || []}
-      risks={risks || []}
-      correctiveMeasures={correctiveMeasures || []}
+      linkedEmployees={incidentLinkedEmployees}
+      risks={incidentRisks}
+      correctiveMeasures={incidentCorrectiveMeasures}
     />
   )
 }

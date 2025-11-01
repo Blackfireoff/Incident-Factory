@@ -9,7 +9,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CalendarIcon, X } from "lucide-react"
 import { format } from "date-fns"
-import { createClient } from "@/lib/supabase/client"
+import { incidents } from "@/lib/data/incidents-data"
 
 interface Filters {
   eventId: string
@@ -37,17 +37,11 @@ export function AdvancedFilters({ filters, onFilterChange }: AdvancedFiltersProp
     fetchFilterOptions()
   }, [])
 
-  async function fetchFilterOptions() {
-    const supabase = createClient()
-
-    const { data: incidentData } = await supabase.from("incidents").select("type, classification")
-
-    if (incidentData) {
-      const uniqueTypes = Array.from(new Set(incidentData.map((i) => i.type)))
-      const uniqueClassifications = Array.from(new Set(incidentData.map((i) => i.classification)))
-      setTypes(uniqueTypes)
-      setClassifications(uniqueClassifications)
-    }
+  function fetchFilterOptions() {
+    const uniqueTypes = Array.from(new Set(incidents.map((i) => i.type)))
+    const uniqueClassifications = Array.from(new Set(incidents.map((i) => i.classification)))
+    setTypes(uniqueTypes)
+    setClassifications(uniqueClassifications)
   }
 
   const handleClearFilters = () => {

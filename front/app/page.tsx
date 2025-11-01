@@ -1,40 +1,24 @@
-import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertTriangle, FileText, AlertCircle, DollarSign } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
+import { incidents, risks, correctiveMeasures } from "@/lib/data/incidents-data"
 
-export default async function Dashboard() {
-  const supabase = await createClient()
+export default function Dashboard() {
+  const totalIncidents = incidents.length
 
-  // Total incidents
-  const { count: totalIncidents } = { count: 100 }
+  const uniqueCriticalIncidents = new Set(risks.filter((r) => r.level === "critical").map((r) => r.incident_id)).size
 
-  // Count incidents with CRITICAL risk
-  const { data: criticalRiskIncidents } = { data: [{ incident_id: 1 }, { incident_id: 2 }, { incident_id: 3 }] }
+  const incidentsWithMeasuresSet = new Set(correctiveMeasures.map((m) => m.incident_id))
+  const incidentsWithoutMeasures = incidents.filter((i) => !incidentsWithMeasuresSet.has(i.id)).length
 
-  const uniqueCriticalIncidents = 10
+  const totalCost = correctiveMeasures.reduce((sum, m) => sum + (m.cost || 0), 0)
 
-  // Count incidents without corrective measures
-  const { data: allIncidents } = await supabase.from("incidents").select("id")
-  const { data: incidentsWithMeasures } = await supabase.from("corrective_measures").select("incident_id")
+  const recentIncidents = [...incidents]
+    .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime())
+    .slice(0, 5)
 
-  const incidentsWithMeasuresSet = new Set(incidentsWithMeasures?.map((m) => m.incident_id) || [])
-  const incidentsWithoutMeasures = allIncidents?.filter((i) => !incidentsWithMeasuresSet.has(i.id)).length || 0
-
-  // Total cost of all corrective measures
-  const totalCost = 100
-
-  const { data: recentIncidents } = await supabase
-    .from("incidents")
-    .select("id, type, classification, start_date")
-    .order("start_date", { ascending: false })
-    .limit(5)
-
-  // Fetch incidents by type for statistics
-  const { data: incidentsByType } = await supabase.from("incidents").select("type")
-
-  const typeCounts = incidentsByType?.reduce(
+  const typeCounts = incidents.reduce(
     (acc, incident) => {
       acc[incident.type] = (acc[incident.type] || 0) + 1
       return acc
@@ -42,9 +26,7 @@ export default async function Dashboard() {
     {} as Record<string, number>,
   )
 
-  const { data: incidentsBySector } = await supabase.from("incidents").select("organization_sector")
-
-  const sectorCounts = incidentsBySector?.reduce(
+  const sectorCounts = incidents.reduce(
     (acc, incident) => {
       const sector = incident.organization_sector || "Unknown"
       acc[sector] = (acc[sector] || 0) + 1
@@ -82,7 +64,7 @@ export default async function Dashboard() {
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-primary">{totalIncidents || 0}</div>
+              <div className="text-3xl font-bold text-primary">{totalIncidents}</div>
               <p className="text-xs text-muted-foreground mt-1">All time reports</p>
             </CardContent>
           </Card>
@@ -129,7 +111,7 @@ export default async function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {recentIncidents?.map((incident) => (
+                {recentIncidents.map((incident) => (
                   <Link key={incident.id} href={`/incident/${incident.id}`}>
                     <div className="flex items-start justify-between border-b border-border pb-3 last:border-0 last:pb-0 hover:bg-accent/50 transition-colors rounded-lg p-2 -m-2 cursor-pointer">
                       <div className="flex-1">
@@ -160,14 +142,14 @@ export default async function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {Object.entries(typeCounts || {}).map(([type, count]) => (
+                {Object.entries(typeCounts).map(([type, count]) => (
                   <div key={type} className="flex items-center justify-between">
                     <span className="text-sm font-medium text-foreground">{type}</span>
                     <div className="flex items-center gap-3">
                       <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
                         <div
                           className="h-full bg-primary rounded-full"
-                          style={{ width: `${(count / (totalIncidents || 1)) * 100}%` }}
+                          style={{ width: `${(count / totalIncidents) * 100}%` }}
                         />
                       </div>
                       <span className="text-sm font-bold text-foreground w-8 text-right">{count}</span>
@@ -185,14 +167,14 @@ export default async function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(sectorCounts || {}).map(([sector, count]) => (
+              {Object.entries(sectorCounts).map(([sector, count]) => (
                 <div key={sector} className="flex items-center justify-between p-4 rounded-lg border bg-card">
                   <span className="text-sm font-medium text-foreground">{sector}</span>
                   <div className="flex items-center gap-3">
                     <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary rounded-full"
-                        style={{ width: `${(count / (totalIncidents || 1)) * 100}%` }}
+                        style={{ width: `${(count / totalIncidents) * 100}%` }}
                       />
                     </div>
                     <span className="text-lg font-bold text-foreground">{count}</span>

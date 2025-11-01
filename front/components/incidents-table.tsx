@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase/client"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -11,16 +10,7 @@ import { Search, ChevronLeft, ChevronRight, Filter } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { AdvancedFilters } from "@/components/advanced-filters"
-
-interface Incident {
-  id: string
-  employee_matricule: string
-  type: string
-  classification: string
-  start_date: string
-  end_date: string | null
-  description: string
-}
+import { incidents as allIncidents, type Incident } from "@/lib/data/incidents-data"
 
 interface IncidentsTableProps {
   totalCount: number
@@ -66,64 +56,70 @@ export function IncidentsTable({ totalCount: initialCount }: IncidentsTableProps
     fetchIncidents()
   }, [currentPage, searchTerm, filters])
 
-  async function fetchIncidents() {
+  function fetchIncidents() {
     setLoading(true)
-    const supabase = createClient()
 
-    let query = supabase
-      .from("incidents")
-      .select("*", { count: "exact" })
-      .order("start_date", { ascending: false })
-      .range((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE - 1)
+    let filtered = [...allIncidents]
 
+    // Apply search term
     if (searchTerm) {
-      query = query.or(
-        `employee_matricule.ilike.%${searchTerm}%,type.ilike.%${searchTerm}%,classification.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`,
+      const term = searchTerm.toLowerCase()
+      filtered = filtered.filter(
+        (i) =>
+          i.employee_matricule.toLowerCase().includes(term) ||
+          i.type.toLowerCase().includes(term) ||
+          i.classification.toLowerCase().includes(term) ||
+          i.description.toLowerCase().includes(term),
       )
     }
 
+    // Apply filters
     if (filters.eventId) {
-      query = query.ilike("id", `%${filters.eventId}%`)
+      filtered = filtered.filter((i) => i.id.toLowerCase().includes(filters.eventId.toLowerCase()))
     }
     if (filters.employeeMatricule) {
-      query = query.ilike("employee_matricule", `%${filters.employeeMatricule}%`)
+      filtered = filtered.filter((i) =>
+        i.employee_matricule.toLowerCase().includes(filters.employeeMatricule.toLowerCase()),
+      )
     }
     if (filters.type) {
-      query = query.eq("type", filters.type)
+      filtered = filtered.filter((i) => i.type === filters.type)
     }
     if (filters.classification) {
-      query = query.eq("classification", filters.classification)
+      filtered = filtered.filter((i) => i.classification === filters.classification)
     }
     if (filters.startDate) {
-      query = query.gte("start_date", filters.startDate.toISOString())
+      filtered = filtered.filter((i) => new Date(i.start_date) >= filters.startDate!)
     }
     if (filters.endDate) {
-      query = query.lte("start_date", filters.endDate.toISOString())
+      filtered = filtered.filter((i) => new Date(i.start_date) <= filters.endDate!)
     }
     if (filters.startMonth) {
-      query = query.gte("start_date", filters.startMonth.toISOString())
+      filtered = filtered.filter((i) => new Date(i.start_date) >= filters.startMonth!)
     }
     if (filters.endMonth) {
       const endOfMonth = new Date(filters.endMonth)
       endOfMonth.setMonth(endOfMonth.getMonth() + 1)
       endOfMonth.setDate(0)
-      query = query.lte("start_date", endOfMonth.toISOString())
+      filtered = filtered.filter((i) => new Date(i.start_date) <= endOfMonth)
     }
     if (filters.startYear) {
-      query = query.gte("start_date", `${filters.startYear}-01-01`)
+      filtered = filtered.filter((i) => new Date(i.start_date).getFullYear() >= Number.parseInt(filters.startYear))
     }
     if (filters.endYear) {
-      query = query.lte("start_date", `${filters.endYear}-12-31`)
+      filtered = filtered.filter((i) => new Date(i.start_date).getFullYear() <= Number.parseInt(filters.endYear))
     }
 
-    const { data, error, count } = await query
+    // Sort by date descending
+    filtered.sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime())
 
-    if (error) {
-      console.error("[v0] Error fetching incidents:", error)
-    } else {
-      setIncidents(data || [])
-      setTotalCount(count || 0)
-    }
+    setTotalCount(filtered.length)
+
+    // Paginate
+    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    const end = start + ITEMS_PER_PAGE
+    setIncidents(filtered.slice(start, end))
+
     setLoading(false)
   }
 
