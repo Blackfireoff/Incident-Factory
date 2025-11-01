@@ -93,29 +93,56 @@ async def get_events(offset: int = 0):
                 }
             )
         
-        # Récupérer les 20 premières lignes avec uniquement les champs demandés
+        # Récupérer les 20 premières lignes avec tous les champs nécessaires pour l'interface Incident
         events = query_db("""
             SELECT 
                 e.event_id,
-                p.matricule,
+                e.description,
                 e.type,
-                e.classification AS classification,
-                e.start_datetime AS start_datetime,
-                e.end_datetime AS end_datetime
+                e.classification,
+                e.start_datetime,
+                e.end_datetime,
+                p.person_id,
+                p.matricule,
+                p.name,
+                p.family_name
             FROM event e
             LEFT JOIN person p ON e.declared_by_id = p.person_id
             ORDER BY e.event_id
             LIMIT 20 OFFSET %s;
         """, params=(offset,))
         
+        # Transformer les résultats pour correspondre à l'interface Incident
+        incidents = []
+        for event in events:
+            incident = {
+                "id": event['event_id'],
+                "type": event['type'],
+                "classification": event['classification'],
+                "start_date": event['start_datetime'],
+                "end_date": event['end_datetime'],
+                "description": event['description'],
+                "reporter": None
+            }
+            
+            # Construire l'objet Person si la personne existe
+            if event['person_id']:
+                incident["reporter"] = {
+                    "matricule": event['matricule'],
+                    "name": event['name'],
+                    "family_name": event['family_name']
+                }
+            
+            incidents.append(incident)
+        
         # Convertir les datetime en strings pour la sérialisation JSON
-        events_serializable = convert_datetime_to_str(list(events))
+        incidents_serializable = convert_datetime_to_str(incidents)
         
         return JSONResponse({
             "status": "success",
             "offset": offset,
-            "count": len(events_serializable),
-            "events": events_serializable
+            "count": len(incidents_serializable),
+            "events": incidents_serializable
         })
     except Exception as e:
         return JSONResponse(
