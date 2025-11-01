@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: postgres_restore
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: events
+      POSTGRES_HOST_AUTH_METHOD: trust  # Pas de mot de passe
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./events.backup:/backup/events.backup:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -h localhost -d events"]
+      interval: 5s
+      retries: 20
+
+  restore:
+    image: postgres:17
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./events.backup:/backup/events.backup:ro
+    entrypoint: >
+      bash -c "
+        echo '🚀 Restauration du backup...' &&
+        pg_restore -h postgres -U postgres -d events --verbose /backup/events.backup &&
+        echo '✅ Restauration terminée' || (echo '❌ Échec restore' && exit 1)
+      "
+
+volumes:
+  pgdata:
