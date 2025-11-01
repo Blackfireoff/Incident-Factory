@@ -1,10 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertTriangle, FileText, AlertCircle, DollarSign } from "lucide-react"
+import { AlertTriangle, FileText, AlertCircle, DollarSign, PieChart, Donut } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 // Corrigé: On importe 'incidents' et les types (pas les listes de données)
-import { incidents, type Risk, type CorrectiveMeasure } from "@/lib/data/incidents-data"
+import { incidents, type Risk, type CorrectiveMeasure, TypeEvent } from "@/lib/data/incidents-data"
 import { getTypeColor } from "@/lib/utils"
+import IncidentsByTypeDonut, { DonutDatum } from "@/components/IncidentsByTypeDonut"
 
 export default function Dashboard() {
     const totalIncidents = incidents.length
@@ -34,31 +35,65 @@ export default function Dashboard() {
             acc[incident.type] = (acc[incident.type] || 0) + 1
             return acc
         },
-        {} as Record<string, number>,
+        {} as Record<TypeEvent, number>,
     )
 
     const sectorCounts = incidents.reduce(
         (acc, incident) => {
-            // Corrigé: Ajout du chaînage optionnel '?' pour plus de sécurité
-            const sector = incident.organization_unit?.identifier ?? "Unknown"
-            acc[sector] = (acc[sector] || 0) + 1
+            const unit = incident.organization_unit
+            const key = unit?.identifier ?? "Unknown"
+
+            if (!acc[key]) {
+                acc[key] = {
+                    key,
+                    label: unit?.name ?? unit?.identifier ?? "Unknown sector",
+                    location: unit?.location ?? "Location unknown",
+                    count: 0,
+                }
+            }
+
+            acc[key].count += 1
+
+            if (unit?.location) {
+                if (acc[key].location === "Location unknown") {
+                    acc[key].location = unit.location
+                } else if (acc[key].location !== unit.location) {
+                    acc[key].location = "Multiple locations"
+                }
+            }
+
+            return acc
+        },
+        {} as Record<
+            string,
+            {
+                key: string
+                label: string
+                location: string
+                count: number
+            }
+        >,
+    )
+
+    const sectorsByOrganization = Object.values(sectorCounts)
+
+    const classificationCounts = incidents.reduce(
+        (acc, incident) => {
+            const key = incident.classification || "Unclassified"
+            acc[key] = (acc[key] || 0) + 1
             return acc
         },
         {} as Record<string, number>,
     )
 
-    const getClassificationColor = (classification: string) => {
-        switch (classification.toLowerCase()) {
-            case "critical":
-                return "bg-red-100 text-red-800 border-red-300"
-            case "major":
-                return "bg-orange-100 text-orange-800 border-orange-300"
-            case "minor":
-                return "bg-yellow-100 text-yellow-800 border-yellow-300"
-            default:
-                return "bg-gray-100 text-gray-800 border-gray-300"
-        }
-    }
+    const classifications = Object.entries(classificationCounts).sort((a, b) => b[1] - a[1])
+    const topClassifications = classifications.slice(0, 5)
+
+    const typeData: DonutDatum[] = (Object.values(TypeEvent) as TypeEvent[]).map(type => ({
+        name: type,
+        value: typeCounts[type] ?? 0,
+    }))
+
 
     return (
         <main className="min-h-screen bg-background">
@@ -70,7 +105,7 @@ export default function Dashboard() {
 
                 {/* Key Metrics */}
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
-                    <Card>
+                    <Card className="gap-4">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Total Incidents</CardTitle>
                             <FileText className="h-4 w-4 text-muted-foreground" />
@@ -81,7 +116,7 @@ export default function Dashboard() {
                         </CardContent>
                     </Card>
 
-                    <Card>
+                    <Card className="gap-4">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Critical Risks</CardTitle>
                             <AlertCircle className="h-4 w-4 text-muted-foreground" />
@@ -104,7 +139,7 @@ export default function Dashboard() {
                         </CardContent>
                     </Card>
 
-                    <Card>
+                    <Card className="gap-4">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Total Corrective Cost</CardTitle>
                             <DollarSign className="h-4 w-4 text-muted-foreground" />
@@ -122,81 +157,102 @@ export default function Dashboard() {
                         <CardHeader>
                             <CardTitle>Recent Incidents</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="flex flex-col gap-4">
-                                {recentIncidents.map((incident) => (
-                                    <Link key={incident.id} href={`/incident/${incident.id}`}>
-                                        <div className="flex items-start justify-between border-b border-border last:border-0 hover:bg-accent/50 transition-colors rounded-lg p-2 -m-2 cursor-pointer">
-                                            <div className="flex flex-col flex-1 gap-1">
-                                                <p className="text-sm font-medium text-foreground">#{incident.id}</p>
-                                                <Badge variant="secondary" className="bg-primary/10 text-primary">
-                                                    {incident.classification}
-                                                </Badge>
+                            <CardContent>
+                                <div className="flex flex-col gap-4">
+                                    {recentIncidents.map((incident) => (
+                                        <Link key={incident.id} href={`/incident/${incident.id}`}>
+                                            <div className="flex items-start justify-between border-b border-border last:border-0 hover:bg-accent/50 transition-colors rounded-lg p-2 -m-2 cursor-pointer">
+                                                <div className="flex flex-col flex-1 gap-1">
+                                                    <p className="text-sm font-medium text-foreground">#{incident.id}</p>
+                                                    <Badge variant="secondary" className="bg-primary/10 text-primary">
+                                                        {incident.classification}
+                                                    </Badge>
+                                                </div>
+                                                <div className="flex flex-col items-end gap-1">
+                                                    <span className="text-sm text-muted-foreground">
+                                                        {incident.start_date.toLocaleDateString()}
+                                                    </span>
+                                                    <Badge variant="outline" className={`${getTypeColor(incident.type)}`}>
+                                                        {incident.type}
+                                                    </Badge>
+                                                </div>
                                             </div>
-                                            <div className="flex flex-col items-end gap-1">
-                                                <span className="text-sm text-muted-foreground">
-                                                    {incident.start_date.toLocaleDateString()}
-                                                </span>
-                                                <Badge variant="outline" className={`${getTypeColor(incident.type)}`}>
-                                                    {incident.type}
-                                                </Badge>
-                                            </div>
-                                        </div>
-                                    </Link>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
+                                        </Link>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                    {/* Incidents by Type */}
-                    <Card>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Incidents by Organization Sector</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <ul className="flex flex-col gap-3">
+                                    {sectorsByOrganization.map(({ key, label, location, count }) => (
+                                        <li
+                                            key={key}
+                                            className="flex items-center justify-between rounded-lg border bg-card p-4"
+                                        >
+                                            <span className="text-sm font-medium text-foreground">
+                                                {label}
+                                                <span className="ml-2 text-xs text-muted-foreground">({location})</span>
+                                            </span>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-24 h-2 bg-muted rounded-full overflow-hidden" aria-hidden>
+                                                    <div
+                                                        className="h-full bg-primary rounded-full"
+                                                        style={{ width: `${(count / totalIncidents) * 100}%` }}
+                                                    />
+                                                </div>
+                                                <span className="text-lg font-bold text-foreground">{count}</span>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </CardContent>
+                        </Card>
+                </div>
+
+                <div className="grid gap-6 lg:grid-cols-2 mb-8">
+                    <Card className="gap-2">
                         <CardHeader>
                             <CardTitle>Incidents by Type</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4">
-                                {Object.entries(typeCounts).map(([type, count]) => (
-                                    <div key={type} className="flex items-center justify-between">
-                                        <span className="text-sm font-medium text-foreground">{type}</span>
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-primary rounded-full"
-                                                    style={{ width: `${(count / totalIncidents) * 100}%` }}
-                                                />
-                                            </div>
-                                            <span className="text-sm font-bold text-foreground w-8 text-right">{count}</span>
-                                        </div>
-                                    </div>
+                            <IncidentsByTypeDonut data={typeData} />
+                        </CardContent>
+                    </Card>
+
+                    <Card className="gap-2">
+                        <CardHeader>
+                            <CardTitle>Incidents by Classification</CardTitle>
+                            <p className="text-sm text-muted-foreground">
+                                Top classifications by total incidents
+                            </p>
+                        </CardHeader>
+                        <CardContent>
+                            <ul className="flex flex-col gap-3">
+                                {topClassifications.map(([classification, count]) => (
+                                    <li
+                                        key={classification}
+                                        className="flex items-center justify-between rounded-lg border bg-card px-4 py-3"
+                                    >
+                                        <span className="font-medium text-foreground">{classification}</span>
+                                        <span className="text-lg font-semibold text-primary">{count}</span>
+                                    </li>
                                 ))}
-                            </div>
+                            </ul>
+                            {classifications.length > topClassifications.length ? (
+                                <p className="mt-3 text-xs text-muted-foreground">
+                                    Showing top {topClassifications.length} classifications. More data may add new entries.
+                                </p>
+                            ) : null}
                         </CardContent>
                     </Card>
                 </div>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Incidents by Organization Sector</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {Object.entries(sectorCounts).map(([sector, count]) => (
-                                <div key={sector} className="flex items-center justify-between p-4 rounded-lg border bg-card">
-                                    <span className="text-sm font-medium text-foreground">{sector}</span>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full bg-primary rounded-full"
-                                                style={{ width: `${(count / totalIncidents) * 100}%` }}
-                                            />
-                                        </div>
-                                        <span className="text-lg font-bold text-foreground">{count}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
+                
             </div>
         </main>
     )

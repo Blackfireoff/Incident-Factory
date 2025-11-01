@@ -1,7 +1,7 @@
 export interface Incident {
     id: number
     type: TypeEvent
-    classification: string
+    classification: ClassificationType
     start_date: Date
     end_date: Date | null
     description: string
@@ -16,6 +16,20 @@ export enum TypeEvent {
     EHS = "EHS",
     ENVIRONMENT = "ENVIRONMENT",
     DAMAGE = "DAMAGE"
+}
+
+export enum ClassificationType {
+    INJURY = "INJURY",
+    FIRST_AID = "FIRST_AID",
+    NEAR_MISS = "NEAR_MISS",
+    LOST_TIME = "LOST_TIME",
+    EQUIPMENT_FAILURE = "EQUIPMENT_FAILURE",
+    PREVENTIVE_DECLARATION = "PREVENTIVE_DECLARATION",
+    PROPERTY_DAMAGE = "PROPERTY_DAMAGE",
+    CHEMICAL_SPILL = "CHEMICAL_SPILL",
+    ENVIRONMENTAL_INCIDENT = "ENVIRONMENTAL_INCIDENT",
+    FIRE_ALARM = "FIRE_ALARM",
+    FIRE = "FIRE"
 }
 
 
@@ -91,7 +105,7 @@ export const incidents: Incident[] = [
     {
         id: 1,
         type: TypeEvent.DAMAGE, // "Equipment Failure"
-        classification: "Major",
+        classification: ClassificationType.INJURY,
         start_date: new Date("2024-01-15T08:30:00Z"),
         end_date: new Date("2024-01-15T12:00:00Z"),
         description: "Injection molding machine malfunction causing production halt",
@@ -150,7 +164,7 @@ export const incidents: Incident[] = [
     {
         id: 2,
         type: TypeEvent.EHS, // "Safety Incident"
-        classification: "Critical",
+        classification: ClassificationType.FIRST_AID,
         start_date: new Date("2024-01-20T14:15:00Z"),
         end_date: new Date("2024-01-20T14:45:00Z"),
         description: "Worker exposed to chemical fumes due to ventilation system failure",
@@ -172,7 +186,7 @@ export const incidents: Incident[] = [
             {
                 id: 3,
                 name: "Worker health and safety - respiratory exposure",
-                gravity: "critical",
+                gravity: ClassificationType.FIRST_AID,
                 probability: "Faible"
             },
             {
@@ -224,7 +238,7 @@ export const incidents: Incident[] = [
     {
         id: 3,
         type: TypeEvent.DAMAGE, // "Quality Issue"
-        classification: "Minor",
+        classification: ClassificationType.NEAR_MISS,
         start_date: new Date("2024-01-25T10:00:00Z"),
         end_date: new Date("2024-01-25T11:30:00Z"),
         description: "Batch of plastic containers failed quality inspection due to improper cooling",
@@ -279,7 +293,7 @@ export const incidents: Incident[] = [
     {
         id: 4,
         type: TypeEvent.ENVIRONMENT, // "Environmental"
-        classification: "Major",
+        classification: ClassificationType.INJURY,
         start_date: new Date("2024-02-01T16:00:00Z"),
         end_date: new Date("2024-02-01T18:30:00Z"),
         description: "Plastic pellet spill in loading dock area",
