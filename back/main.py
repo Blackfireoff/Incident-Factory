@@ -106,14 +106,24 @@ async def get_tables():
         )
 
 @app.get("/get_events")
-async def get_events():
-    """Route pour récupérer les 10 premières lignes de la table event"""
+async def get_events(offset: int = 0):
+    """Route pour récupérer les 20 premières lignes de la table event avec pagination"""
     try:
+        # Validation: offset doit être >= 0
+        if offset < 0:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "message": "Offset must be a non-negative integer"
+                }
+            )
+        
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Récupérer les 10 premières lignes de la table event
-        cursor.execute("SELECT * FROM event LIMIT 10;")
+        # Récupérer les 20 premières lignes de la table event avec offset
+        cursor.execute("SELECT * FROM event ORDER BY event_id LIMIT 20 OFFSET %s;", (offset,))
         events = cursor.fetchall()
         
         cursor.close()
@@ -124,6 +134,7 @@ async def get_events():
         
         return JSONResponse({
             "status": "success",
+            "offset": offset,
             "count": len(events_serializable),
             "events": events_serializable
         })
