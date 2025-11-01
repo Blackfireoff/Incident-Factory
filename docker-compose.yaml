@@ -34,5 +34,35 @@ services:
         echo '✅ Restauration terminée' || (echo '❌ Échec restore' && exit 1)
       "
 
+  opensearch:
+    image: opensearchproject/opensearch:latest
+    container_name: opensearch
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true            # DEV: pas d'auth
+      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g        # Heap 1 Go (ajuste selon ta RAM)
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"   # API
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+
+  dashboards:
+    image: opensearchproject/opensearch-dashboards:latest
+    container_name: opensearch-dashboards
+    environment:
+      - OPENSEARCH_HOSTS=["http://opensearch:9200"]
+      - OPENSEARCH_SECURITY_DISABLED=true         # match plugins.security.disabled
+    ports:
+      - "5601:5601"   # UI
+    depends_on:
+      - opensearch
+
+
 volumes:
   pgdata:
+  opensearch-data:
+

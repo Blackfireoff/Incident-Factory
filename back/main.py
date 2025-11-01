@@ -1,14 +1,8 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-import os
-from dotenv import load_dotenv
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from datetime import datetime, date
 from decimal import Decimal
-
-# Charger les variables d'environnement
-load_dotenv()
+from database import query_db
 
 app = FastAPI(title="FireTeams API")
 
@@ -25,20 +19,6 @@ def convert_datetime_to_str(obj):
         return [convert_datetime_to_str(item) for item in obj]
     return obj
 
-# Fonction pour obtenir la connexion à la base de données
-def get_db_connection():
-    try:
-        conn = psycopg2.connect(
-            host=os.getenv("DB_HOST", "localhost"),
-            port=os.getenv("DB_PORT", "5432"),
-            database=os.getenv("DB_NAME", "events"),
-            user=os.getenv("DB_USER", "postgres"),
-            password=os.getenv("DB_PASSWORD", "postgres")
-        )
-        return conn
-    except Exception as e:
-        raise Exception(f"Erreur de connexion à la base de données: {str(e)}")
-
 @app.get("/")
 async def root():
     return {"message": "FireTeams API is running"}
@@ -47,18 +27,8 @@ async def root():
 async def db_status():
     """Route pour vérifier la connexion à la base de données"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Test de connexion simple
-        cursor.execute("SELECT version();")
-        version = cursor.fetchone()
-        
-        cursor.execute("SELECT current_database(), current_user;")
-        db_info = cursor.fetchone()
-        
-        cursor.close()
-        conn.close()
+        version = query_db("SELECT version();", fetch_one=True)
+        db_info = query_db("SELECT current_database(), current_user;", fetch_one=True)
         
         return JSONResponse({
             "status": "success",
@@ -80,20 +50,12 @@ async def db_status():
 async def get_tables():
     """Route pour lister les tables de la base de données"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Récupérer la liste des tables
-        cursor.execute("""
+        tables = query_db("""
             SELECT table_name 
             FROM information_schema.tables 
             WHERE table_schema = 'public'
             ORDER BY table_name;
         """)
-        tables = cursor.fetchall()
-        
-        cursor.close()
-        conn.close()
         
         return JSONResponse({
             "status": "success",
@@ -122,11 +84,8 @@ async def get_events(offset: int = 0):
                 }
             )
         
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
         # Récupérer les 20 premières lignes avec uniquement les champs demandés
-        cursor.execute("""
+        events = query_db("""
             SELECT 
                 e.event_id,
                 p.matricule,
@@ -138,11 +97,7 @@ async def get_events(offset: int = 0):
             LEFT JOIN person p ON e.declared_by_id = p.person_id
             ORDER BY e.event_id
             LIMIT 20 OFFSET %s;
-        """, (offset,))
-        events = cursor.fetchall()
-        
-        cursor.close()
-        conn.close()
+        """, params=(offset,))
         
         # Convertir les datetime en strings pour la sérialisation JSON
         events_serializable = convert_datetime_to_str(list(events))
@@ -166,24 +121,22 @@ async def get_events(offset: int = 0):
 async def get_event_details(event_id: int):
     """Route pour récupérer tous les détails d'un événement"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Récupérer les détails de l'événement
-        cursor.execute("""
+        # Récupérer les détails de l'événement avec inner join person
+        event = query_db("""
             SELECT 
                 e.event_id,
                 e.description,
-                e.declared_by_id,
                 e.start_datetime,
                 e.end_datetime,
-                e.organizational_unit_id,
                 e.type,
-                e.classification
+                e.classification,
+                p.matricule,
+                p.name,
+                p.family_name
             FROM event e
+            INNER JOIN person p ON e.declared_by_id = p.person_id
             WHERE e.event_id = %s;
-        """, (event_id,))
-        event = cursor.fetchone()
+        """, params=(event_id,), fetch_one=True)
         
         if not event:
             return JSONResponse(
@@ -194,90 +147,105 @@ async def get_event_details(event_id: int):
                 }
             )
         
-        # Récupérer les détails de la personne qui a déclaré l'événement
-        declared_by = None
-        if event['declared_by_id']:
-            cursor.execute("""
-                SELECT person_id, matricule, name, family_name, role
-                FROM person
-                WHERE person_id = %s;
-            """, (event['declared_by_id'],))
-            declared_by = cursor.fetchone()
-        
-        # Récupérer les détails de l'unité organisationnelle
-        organizational_unit = None
-        if event['organizational_unit_id']:
-            cursor.execute("""
-                SELECT unit_id, identifier, name, location
-                FROM organizational_unit
-                WHERE unit_id = %s;
-            """, (event['organizational_unit_id'],))
-            organizational_unit = cursor.fetchone()
-        
-        # Récupérer les employés impliqués
-        cursor.execute("""
+        # Récupérer les employés impliqués avec inner join person
+        employees = query_db("""
             SELECT 
-                p.person_id,
+                ee.person_id,
                 p.matricule,
                 p.name,
-                p.family_name,
-                p.role,
-                ee.involvement_type
+                p.family_name
             FROM event_employee ee
-            JOIN person p ON ee.person_id = p.person_id
+            INNER JOIN person p ON ee.person_id = p.person_id
             WHERE ee.event_id = %s;
-        """, (event_id,))
-        employees = cursor.fetchall()
+        """, params=(event_id,))
         
-        # Récupérer les risques associés
-        cursor.execute("""
+        # Récupérer l'unité organisationnelle
+        organizational_unit = query_db("""
             SELECT 
-                r.risk_id,
+                ou.identifier,
+                ou.name
+            FROM event e
+            INNER JOIN organizational_unit ou ON e.organizational_unit_id = ou.unit_id
+            WHERE e.event_id = %s;
+        """, params=(event_id,), fetch_one=True)
+        
+        # Récupérer les mesures correctives avec inner join corrective_measure et person
+        corrective_measures = query_db("""
+            SELECT 
+                cm.name,
+                cm.implementation_date AS implementation,
+                cm.description,
+                cm.cost,
+                cm.owner_id,
+                p_owner.matricule AS owner_matricule,
+                p_owner.name AS owner_name,
+                p_owner.family_name AS owner_family_name
+            FROM event_corrective_measure ecm
+            INNER JOIN corrective_measure cm ON ecm.measure_id = cm.measure_id
+            INNER JOIN person p_owner ON cm.owner_id = p_owner.person_id
+            WHERE ecm.event_id = %s;
+        """, params=(event_id,))
+        
+        # Récupérer les risques avec inner join risk
+        risks = query_db("""
+            SELECT 
                 r.name,
                 r.gravity,
                 r.probability
             FROM event_risk er
-            JOIN risk r ON er.risk_id = r.risk_id
+            INNER JOIN risk r ON er.risk_id = r.risk_id
             WHERE er.event_id = %s;
-        """, (event_id,))
-        risks = cursor.fetchall()
+        """, params=(event_id,))
         
-        # Récupérer les mesures correctives
-        cursor.execute("""
-            SELECT 
-                cm.measure_id,
-                cm.name,
-                cm.description,
-                cm.owner_id,
-                cm.implementation_date,
-                cm.cost,
-                cm.organizational_unit_id,
-                p.matricule AS owner_matricule,
-                p.name AS owner_name,
-                p.family_name AS owner_family_name
-            FROM event_corrective_measure ecm
-            JOIN corrective_measure cm ON ecm.measure_id = cm.measure_id
-            LEFT JOIN person p ON cm.owner_id = p.person_id
-            WHERE ecm.event_id = %s;
-        """, (event_id,))
-        corrective_measures = cursor.fetchall()
-        
-        cursor.close()
-        conn.close()
-        
-        # Construire la réponse
+        # Construire la réponse selon la structure demandée
         result = {
             "event_id": event['event_id'],
             "description": event['description'],
-            "type": event['type'],
-            "classification": event['classification'],
             "start_datetime": event['start_datetime'],
             "end_datetime": event['end_datetime'],
-            "declared_by": declared_by,
-            "organizational_unit": organizational_unit,
-            "employees": list(employees) if employees else [],
-            "risks": list(risks) if risks else [],
-            "corrective_measures": list(corrective_measures) if corrective_measures else []
+            "type": event['type'],
+            "classification": event['classification'],
+            "person": {
+                "matricule": event['matricule'],
+                "name": event['name'],
+                "family_name": event['family_name']
+            },
+            "employees": [
+                {
+                    "person_id": emp['person_id'],
+                    "matricule": emp['matricule'],
+                    "name": emp['name'],
+                    "family_name": emp['family_name']
+                }
+                for emp in (employees if employees else [])
+            ],
+            "organizational_unit": {
+                "identifier": organizational_unit['identifier'] if organizational_unit else None,
+                "name": organizational_unit['name'] if organizational_unit else None
+            } if organizational_unit else None,
+            "corrective_measures": [
+                {
+                    "name": cm['name'],
+                    "implementation": cm['implementation'],
+                    "description": cm['description'],
+                    "cost": cm['cost'],
+                    "owner_id": cm['owner_id'],
+                    "owner": {
+                        "matricule": cm['owner_matricule'],
+                        "name": cm['owner_name'],
+                        "family_name": cm['owner_family_name']
+                    }
+                }
+                for cm in (corrective_measures if corrective_measures else [])
+            ],
+            "risks": [
+                {
+                    "name": r['name'],
+                    "gravity": r['gravity'],
+                    "probability": r['probability']
+                }
+                for r in (risks if risks else [])
+            ]
         }
         
         # Convertir les datetime en strings pour la sérialisation JSON
