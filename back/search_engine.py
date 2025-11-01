@@ -2,6 +2,28 @@
 from opensearchpy import OpenSearch
 import os
 
+# --- OpenSearch index & queries (full-text) ---
+
+INDEX_SETTINGS = {
+    "settings": {
+        "analysis": {
+            "analyzer": {
+                "french_text": {"type": "french"}
+            }
+        }
+    },
+    "mappings": {
+        "properties": {
+            "event_id": {"type": "keyword"},
+            "type": {"type": "text", "analyzer": "french_text"},
+            "classification": {"type": "text", "analyzer": "french_text"},
+            "description": {"type": "text", "analyzer": "french_text"},
+            "start_datetime": {"type": "date"},
+            "end_datetime": {"type": "date"}
+        }
+    }
+}
+
 def get_opensearch_client():
     """Connexion HTTPS à OpenSearch (sécurité activée)"""
     return OpenSearch(
@@ -15,33 +37,25 @@ def get_opensearch_client():
     )
 
 def ensure_index(client, index_name: str):
-    """Crée l’index s’il n’existe pas"""
+    """Crée l'index s'il n'existe pas avec les mappings full-text français"""
     if not client.indices.exists(index=index_name):
-        client.indices.create(index=index_name, body={
-            "settings": {"index": {"number_of_shards": 1, "number_of_replicas": 0}},
-            "mappings": {
-                "properties": {
-                    "event_id": {"type": "integer"},
-                    "type": {"type": "keyword"},
-                    "classification": {"type": "keyword"},
-                    "description": {"type": "text", "analyzer": "french"},
-                    "start_datetime": {"type": "date"},
-                    "end_datetime": {"type": "date"}
-                }
-            }
-        })
+        client.indices.create(index=index_name, body=INDEX_SETTINGS)
 
 def index_incident(client, index_name: str, document_id: int, body: dict):
-    client.index(index=index_name, id=document_id, body=body)
+    """Indexe un incident avec refresh=True pour visibilité immédiate en dev"""
+    client.index(index=index_name, id=document_id, body=body, refresh=True)
 
 def search_incidents(client, index_name: str, query: str):
+    """Recherche full-text avec multi_match sur description, type, classification"""
     body = {
         "query": {
-            "simple_query_string": {
+            "multi_match": {
                 "query": query,
-                "fields": ["description", "type", "classification"],
-                "default_operator": "and"
+                "fields": ["description^3", "type^2", "classification"],
+                "operator": "or",
+                "fuzziness": "AUTO"
             }
-        }
+        },
+        "size": 10
     }
     return client.search(index=index_name, body=body)

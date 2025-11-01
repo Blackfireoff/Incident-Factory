@@ -7,8 +7,9 @@ from fastapi import Request
 from services.bedrock_service import BedrockChatService
 from opensearchpy import OpenSearch
 import boto3
-import numpy as np
 import json
+from typing import List
+from services.bedrock_service import MODEL_ID 
 
 
 from search_engine import get_opensearch_client, ensure_index, index_incident, search_incidents
@@ -87,14 +88,77 @@ def answer_question_with_context(question: str):
 
     user_prompt = f"Contexte:\n{context_text}\n\nQuestion: {question}"
 
-    response = bedrock.converse(
-        modelId="arn:aws:bedrock:us-east-1:123456789012:inference-profile/meta.llama3-2-11b-instruct-v1",
+    # Créer le client Bedrock
+    bedrock_client = boto3.client(
+        service_name="bedrock-runtime",
+        region_name="us-east-1"
+    )
+
+    response = bedrock_client.converse(
+        modelId="arn:aws:bedrock:us-east-1:010526273152:inference-profile/us.meta.llama3-2-11b-instruct-v1:0",
         system=[{"text": system_prompt}],
         messages=[{"role": "user", "content": [{"text": user_prompt}]}],
         inferenceConfig={"temperature": 0.7, "maxTokens": 1000}
     )
 
     return response["output"]["message"]["content"][0]["text"]
+
+def _fetch_context_from_os(query: str, limit: int = 5) -> List[dict]:
+    """Récupère le contexte depuis OpenSearch (recherche full-text)"""
+    client = get_opensearch_client()
+    ensure_index(client, INDEX_NAME)
+    res = search_incidents(client, INDEX_NAME, query)  # multi_match sur description/type/classification
+    hits = (res or {}).get("hits", {}).get("hits", [])[:limit]
+    ctx = []
+    for h in hits:
+        s = h.get("_source", {})
+        ctx.append({
+            "event_id": s.get("event_id"),
+            "type": s.get("type"),
+            "classification": s.get("classification"),
+            "start_datetime": s.get("start_datetime"),
+            "end_datetime": s.get("end_datetime"),
+            "description": s.get("description")
+        })
+    return ctx
+
+def _build_prompts(user_message: str, ctx: List[dict]) -> tuple[str, str]:
+    system_prompt = (
+        "Tu es un assistant d'analyse d'incidents. Tu DOIS répondre uniquement à partir du CONTEXTE fourni, "
+        "qui provient d'événements stockés en base PostgreSQL et indexés dans OpenSearch.\n\n"
+        "Règles:\n"
+        "- Si l'information n'est pas présente dans le contexte, réponds exactement: \"Je ne sais pas sur la base du contexte fourni.\"\n"
+        "- Ne fais aucune supposition et n'invente pas de faits.\n"
+        "- Cite toujours les événements pertinents sous la forme [event_id:123].\n"
+        "- Si plusieurs explications sont plausibles, liste-les brièvement et indique un degré de confiance (faible/moyen/élevé).\n"
+        "- Réponds en français, clair et concis. Pas d'URL externes, pas de code.\n\n"
+        "Format de sortie:\n"
+        "Réponse: <ta réponse courte et claire>\n"
+        "Citations: [event_id:..., event_id:...]"
+    )
+
+    if ctx:
+        blocks = []
+        for c in ctx:
+            blocks.append(
+                f"[event_id={c.get('event_id')}] type={c.get('type')}, classification={c.get('classification')}, "
+                f"start={c.get('start_datetime')}, end={c.get('end_datetime')}\n"
+                f"{c.get('description') or ''}"
+            )
+        context_block = "\n\n".join(blocks)
+    else:
+        context_block = "(aucun contexte trouvé)"
+
+    user_prompt = (
+        f"Question: {user_message}\n\n"
+        f"Contexte (incidents):\n{context_block}\n\n"
+        "Consignes:\n"
+        "- Utilise uniquement le contexte ci-dessus.\n"
+        "- S'il est vide ou non pertinent, dis \"Je ne sais pas sur la base du contexte fourni.\"\n"
+        "- Cite les event_id utilisés."
+    )
+    
+    return system_prompt, user_prompt
 
 
 @app.on_event("startup")
@@ -414,114 +478,100 @@ async def analyze_event_from_db(event_id: int):
 
 
 
-@app.get("/index")
-async def index(event_id: int | None = Query(None, ge=1), offset: int = 0):
-    # /index            -> tout (paginé)
-    # /index?event_id=5 -> un seul événement
-    if event_id is None:
-        return await get_events(offset)            # réutilise ton handler liste
-    return await get_event_details(event_id)  
-
-@app.post("/opensearch/index/one")
-async def os_index_one(event_id: int = Query(..., ge=1)):
-    """Indexe un événement (event_id) dans OpenSearch"""
-    row = query_db("""
-        SELECT event_id, description, type, classification, start_datetime, end_datetime
-        FROM event WHERE event_id = %s;
-    """, params=(event_id,), fetch_one=True)
-    if not row:
-        return JSONResponse(status_code=404, content={"error": "Event not found"})
-
-    client = get_opensearch_client()
-    ensure_index(client, INDEX_NAME)
-    index_incident(client, INDEX_NAME, row["event_id"], row)
-    return {"status": "indexed", "event_id": row["event_id"]}
-
 @app.post("/opensearch/index/all")
-async def os_index_all(batch: int = 1000, offset: int = 0):
-    """Indexe tous les événements (par batch)"""
-    client = get_opensearch_client()
-    ensure_index(client, INDEX_NAME)
-
-    total = 0
-    while True:
+async def opensearch_index_all():
+    """
+    Charge tous les events depuis Postgres et indexe dans OpenSearch (full-text).
+    """
+    try:
         rows = query_db("""
-            SELECT event_id, description, type, classification, start_datetime, end_datetime
+            SELECT
+              event_id,
+              type,
+              classification,
+              start_datetime,
+              end_datetime,
+              description
             FROM event
             ORDER BY event_id
-            LIMIT %s OFFSET %s;
-        """, params=(batch, offset))
-        if not rows:
-            break
+        """, fetch_one=False)
+
+        client = get_opensearch_client()
+        ensure_index(client, INDEX_NAME)
+
+        count = 0
         for r in rows:
-            index_incident(client, INDEX_NAME, r["event_id"], r)
-        total += len(rows)
-        offset += len(rows)
-        if len(rows) < batch:
-            break
-    return {"status": "indexed", "count": total}    
+            doc_id = r["event_id"]
+            index_incident(client, INDEX_NAME, doc_id, {
+                "event_id": r["event_id"],
+                "type": r.get("type"),
+                "classification": r.get("classification"),
+                "start_datetime": r.get("start_datetime"),
+                "end_datetime": r.get("end_datetime"),
+                "description": r.get("description"),
+            })
+            count += 1
 
+        return {"status": "indexed", "count": count}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
-@app.get("/index")
-async def index(event_id: int | None = Query(None, ge=1), offset: int = 0):
-    # /index            -> tout (paginé)
-    # /index?event_id=5 -> un seul événement
-    if event_id is None:
-        return await get_events(offset)            # réutilise ton handler liste
-    return await get_event_details(event_id)  
-
-@app.post("/opensearch/index/one")
-async def os_index_one(event_id: int = Query(..., ge=1)):
-    """Indexe un événement (event_id) dans OpenSearch"""
-    row = query_db("""
-        SELECT event_id, description, type, classification, start_datetime, end_datetime
-        FROM event WHERE event_id = %s;
-    """, params=(event_id,), fetch_one=True)
-    if not row:
-        return JSONResponse(status_code=404, content={"error": "Event not found"})
-
-    client = get_opensearch_client()
-    ensure_index(client, INDEX_NAME)
-    index_incident(client, INDEX_NAME, row["event_id"], row)
-    return {"status": "indexed", "event_id": row["event_id"]}
-
-@app.post("/opensearch/index/all")
-async def os_index_all(batch: int = 1000, offset: int = 0):
-    """Indexe tous les événements (par batch)"""
-    client = get_opensearch_client()
-    ensure_index(client, INDEX_NAME)
-
-    total = 0
-    while True:
-        rows = query_db("""
-            SELECT event_id, description, type, classification, start_datetime, end_datetime
-            FROM event
-            ORDER BY event_id
-            LIMIT %s OFFSET %s;
-        """, params=(batch, offset))
-        if not rows:
-            break
-        for r in rows:
-            index_incident(client, INDEX_NAME, r["event_id"], r)
-        total += len(rows)
-        offset += len(rows)
-        if len(rows) < batch:
-            break
-    return {"status": "indexed", "count": total}
-
-from fastapi import Request
+@app.get("/opensearch/count")
+async def opensearch_count():
+    """Retourne le nombre de documents indexés dans OpenSearch"""
+    try:
+        client = get_opensearch_client()
+        ensure_index(client, INDEX_NAME)
+        res = client.count(index=INDEX_NAME)
+        return {"index": INDEX_NAME, "doc_count": res.get("count", 0)}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 @app.post("/ai/query")
-async def query_database(request: Request):
-    """Permet de poser une question libre à l'IA sur la base d'évènements"""
-    data = await request.json()
-    question = data.get("question")
+async def ai_query(request: Request):
+    """
+    Body JSON: { "message": "..." }  (or { "question": "..." })
+    Returns: { status, question, context_count, answer }
+    """
+    try:
+        data = await request.json()
+        msg = (data or {}).get("message") or (data or {}).get("question")
+        if not msg:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": "Provide 'message' (or 'question') in the JSON body"}
+            )
 
-    if not question:
-        return JSONResponse(status_code=400, content={"status": "error", "message": "Champ 'question' requis"})
+        # 1) retrieve context from OpenSearch full-text
+        ctx = _fetch_context_from_os(msg, limit=1000)
 
-    answer = answer_question_with_context(question)
-    return JSONResponse({"status": "success", "question": question, "answer": answer})
+        # 2) build prompts
+        system_prompt, user_prompt = _build_prompts(msg, ctx)
+
+        print(ctx)
+
+        # 3) call Bedrock (re-use your client & model/profile)
+        response = chat_service.bedrock.converse(
+            modelId=MODEL_ID,
+            system=[{"text": system_prompt}],
+            messages=[{"role": "user", "content": [{"text": user_prompt}]}],
+            inferenceConfig={"temperature": 0.2, "maxTokens": 600, "topP": 0.9}
+        )
+
+        answer = response["output"]["message"]["content"][0]["text"]
+
+        return JSONResponse({
+            "status": "success",
+            "question": msg,
+            "context_count": len(ctx),
+            "answer": answer
+        })
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"Erreur lors du traitement: {str(e)}"}
+        )
+
 
 
 if __name__ == "__main__":
