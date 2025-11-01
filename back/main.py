@@ -4,18 +4,21 @@ import os
 from dotenv import load_dotenv
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from datetime import datetime
+from datetime import datetime, date
+from decimal import Decimal
 
 # Charger les variables d'environnement
 load_dotenv()
 
 app = FastAPI(title="FireTeams API")
 
-# Fonction pour convertir les datetime en strings pour la sérialisation JSON
+# Fonction pour convertir les datetime, date et Decimal en types JSON-serialisables
 def convert_datetime_to_str(obj):
-    """Convertit les objets datetime en chaînes de caractères pour la sérialisation JSON"""
-    if isinstance(obj, datetime):
+    """Convertit les objets datetime, date et Decimal en types JSON-serialisables"""
+    if isinstance(obj, (datetime, date)):
         return obj.isoformat()
+    elif isinstance(obj, Decimal):
+        return float(obj)
     elif isinstance(obj, dict):
         return {key: convert_datetime_to_str(value) for key, value in obj.items()}
     elif isinstance(obj, list):
@@ -122,8 +125,20 @@ async def get_events(offset: int = 0):
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Récupérer les 20 premières lignes de la table event avec offset
-        cursor.execute("SELECT * FROM event ORDER BY event_id LIMIT 20 OFFSET %s;", (offset,))
+        # Récupérer les 20 premières lignes avec uniquement les champs demandés
+        cursor.execute("""
+            SELECT 
+                e.event_id,
+                p.matricule,
+                e.type,
+                e.classification AS classification,
+                e.start_datetime AS start_datetime,
+                e.end_datetime AS end_datetime
+            FROM event e
+            LEFT JOIN person p ON e.declared_by_id = p.person_id
+            ORDER BY e.event_id
+            LIMIT 20 OFFSET %s;
+        """, (offset,))
         events = cursor.fetchall()
         
         cursor.close()
@@ -144,6 +159,140 @@ async def get_events(offset: int = 0):
             content={
                 "status": "error",
                 "message": f"Erreur lors de la récupération des événements: {str(e)}"
+            }
+        )
+
+@app.get("/{event_id}/details")
+async def get_event_details(event_id: int):
+    """Route pour récupérer tous les détails d'un événement"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Récupérer les détails de l'événement
+        cursor.execute("""
+            SELECT 
+                e.event_id,
+                e.description,
+                e.declared_by_id,
+                e.start_datetime,
+                e.end_datetime,
+                e.organizational_unit_id,
+                e.type,
+                e.classification
+            FROM event e
+            WHERE e.event_id = %s;
+        """, (event_id,))
+        event = cursor.fetchone()
+        
+        if not event:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "status": "error",
+                    "message": f"Événement avec l'ID {event_id} introuvable"
+                }
+            )
+        
+        # Récupérer les détails de la personne qui a déclaré l'événement
+        declared_by = None
+        if event['declared_by_id']:
+            cursor.execute("""
+                SELECT person_id, matricule, name, family_name, role
+                FROM person
+                WHERE person_id = %s;
+            """, (event['declared_by_id'],))
+            declared_by = cursor.fetchone()
+        
+        # Récupérer les détails de l'unité organisationnelle
+        organizational_unit = None
+        if event['organizational_unit_id']:
+            cursor.execute("""
+                SELECT unit_id, identifier, name, location
+                FROM organizational_unit
+                WHERE unit_id = %s;
+            """, (event['organizational_unit_id'],))
+            organizational_unit = cursor.fetchone()
+        
+        # Récupérer les employés impliqués
+        cursor.execute("""
+            SELECT 
+                p.person_id,
+                p.matricule,
+                p.name,
+                p.family_name,
+                p.role,
+                ee.involvement_type
+            FROM event_employee ee
+            JOIN person p ON ee.person_id = p.person_id
+            WHERE ee.event_id = %s;
+        """, (event_id,))
+        employees = cursor.fetchall()
+        
+        # Récupérer les risques associés
+        cursor.execute("""
+            SELECT 
+                r.risk_id,
+                r.name,
+                r.gravity,
+                r.probability
+            FROM event_risk er
+            JOIN risk r ON er.risk_id = r.risk_id
+            WHERE er.event_id = %s;
+        """, (event_id,))
+        risks = cursor.fetchall()
+        
+        # Récupérer les mesures correctives
+        cursor.execute("""
+            SELECT 
+                cm.measure_id,
+                cm.name,
+                cm.description,
+                cm.owner_id,
+                cm.implementation_date,
+                cm.cost,
+                cm.organizational_unit_id,
+                p.matricule AS owner_matricule,
+                p.name AS owner_name,
+                p.family_name AS owner_family_name
+            FROM event_corrective_measure ecm
+            JOIN corrective_measure cm ON ecm.measure_id = cm.measure_id
+            LEFT JOIN person p ON cm.owner_id = p.person_id
+            WHERE ecm.event_id = %s;
+        """, (event_id,))
+        corrective_measures = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        # Construire la réponse
+        result = {
+            "event_id": event['event_id'],
+            "description": event['description'],
+            "type": event['type'],
+            "classification": event['classification'],
+            "start_datetime": event['start_datetime'],
+            "end_datetime": event['end_datetime'],
+            "declared_by": declared_by,
+            "organizational_unit": organizational_unit,
+            "employees": list(employees) if employees else [],
+            "risks": list(risks) if risks else [],
+            "corrective_measures": list(corrective_measures) if corrective_measures else []
+        }
+        
+        # Convertir les datetime en strings pour la sérialisation JSON
+        result_serializable = convert_datetime_to_str(result)
+        
+        return JSONResponse({
+            "status": "success",
+            "event": result_serializable
+        })
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Erreur lors de la récupération des détails de l'événement: {str(e)}"
             }
         )
 
