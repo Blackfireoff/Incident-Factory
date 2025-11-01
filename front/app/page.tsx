@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 // Corrigé: On importe 'incidents' et les types (pas les listes de données)
 import { incidents, type Risk, type CorrectiveMeasure } from "@/lib/data/incidents-data"
+import { getTypeColor } from "@/lib/utils"
 
 export default function Dashboard() {
     const totalIncidents = incidents.length
@@ -122,25 +123,23 @@ export default function Dashboard() {
                             <CardTitle>Recent Incidents</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4">
+                            <div className="flex flex-col gap-4">
                                 {recentIncidents.map((incident) => (
                                     <Link key={incident.id} href={`/incident/${incident.id}`}>
-                                        <div className="flex items-start justify-between border-b border-border pb-3 last:border-0 last:pb-0 hover:bg-accent/50 transition-colors rounded-lg p-2 -m-2 cursor-pointer">
-                                            <div className="flex-1">
-                                                {/* Corrigé: 'id' est un nombre, s'affichera directement */}
-                                                <p className="font-mono text-sm font-medium text-foreground">#{incident.id}</p>
-                                                <Badge variant="outline" className={`${getClassificationColor(incident.classification)} mt-1`}>
+                                        <div className="flex items-start justify-between border-b border-border last:border-0 hover:bg-accent/50 transition-colors rounded-lg p-2 -m-2 cursor-pointer">
+                                            <div className="flex flex-col flex-1 gap-1">
+                                                <p className="text-sm font-medium text-foreground">#{incident.id}</p>
+                                                <Badge variant="secondary" className="bg-primary/10 text-primary">
                                                     {incident.classification}
                                                 </Badge>
                                             </div>
-                                            <div className="flex flex-col items-end gap-2">
-                                                <Badge variant="secondary" className="bg-primary/10 text-primary">
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span className="text-sm text-muted-foreground">
+                                                    {incident.start_date.toLocaleDateString()}
+                                                </span>
+                                                <Badge variant="outline" className={`${getTypeColor(incident.type)}`}>
                                                     {incident.type}
                                                 </Badge>
-                                                <span className="text-sm text-muted-foreground">
-                          {/* Corrigé: 'start_date' est déjà un objet Date */}
-                                                    {incident.start_date.toLocaleDateString()}
-                        </span>
                                             </div>
                                         </div>
                                     </Link>

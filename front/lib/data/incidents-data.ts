@@ -1,6 +1,6 @@
 export interface Incident {
     id: number
-    type: string
+    type: TypeEvent
     classification: string
     start_date: Date
     end_date: Date | null
