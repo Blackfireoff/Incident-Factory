@@ -1,131 +1,150 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertTriangle, FileText, AlertCircle, DollarSign, PieChart, Donut } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { AlertCircle, AlertTriangle, DollarSign, FileText } from "lucide-react"
 import Link from "next/link"
-// Corrigé: On importe 'incidents' et les types (pas les listes de données)
-import { incidents, type Risk, type CorrectiveMeasure, TypeEvent, Incident, OrganizationalUnit, ClassificationEvent } from "@/lib/data/incidents-data"
-import { getTypeColor } from "@/lib/utils"
+import { Badge } from "@/components/ui/badge"
 import IncidentsByTypeDonut, { DonutDatum } from "@/components/IncidentsByTypeDonut"
+import { getTypeColor } from "@/lib/utils"
+import { ClassificationEvent, Incident, OrganizationalUnit, Person, TypeEvent } from "@/lib/data/incidents-data"
 
-export interface BasicInformation {
-    total_event_count: number,
-    total_critical_risk_count: number,
-    total_no_corrective_measure_count: number,
-    total_corrective_measure_cost: number
+const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_URL ?? process.env.API_BASE_URL ?? "http://localhost:8000"
+
+interface BasicInfoResponse {
+    status?: string
+    data?: {
+        total_event_count: number
+        total_critical_risk_count: number
+        total_no_corrective_measure_count: number
+        total_corrective_measure_cost: number
+    }
+    message?: string
 }
 
-export interface MostRecentIncidents {
-    incidents: Incident[]
+interface MostRecentIncidentsResponse {
+    incidents?: Incident[]
+    status?: string
+    message?: string
 }
 
-export interface TopOrganizationCount {
-    top_organization: [
-        organization: OrganizationalUnit,
-        value: number
-    ]
+interface TopOrganizationEntry {
+    organization: OrganizationalUnit
+    value: number
 }
 
-export interface IncidentByType {
-    incidents: [
-        type: TypeEvent,
-        value: number
-    ]
+interface TopOrganizationResponse {
+    top_organization?: TopOrganizationEntry[]
+    status?: string
+    message?: string
 }
 
-export interface IncidentByClassification {
-    incidents: [
-        type: ClassificationEvent,
-        value: number
-    ]
+interface IncidentTypeCountItem {
+    type: TypeEvent
+    value: number
 }
 
-export default function Dashboard() {
-    const totalIncidents = incidents.length
+interface IncidentByTypeResponse {
+    incidents_by_type?: IncidentTypeCountItem[]
+    status?: string
+    message?: string
+}
 
-    // Corrigé: On filtre les incidents qui ont au moins un risque critique
-    const criticalIncidentsCount = incidents.filter(
-        (i) => i.risks?.some((r) => r.gravity.toLowerCase() === "critical")
-    ).length
+interface IncidentClassificationCountItem {
+    classification: ClassificationEvent
+    value: number
+}
 
-    // Corrigé: On filtre les incidents qui n'ont aucune mesure corrective
-    const incidentsWithoutMeasures = incidents.filter(
-        (i) => i.corrective_measures?.length === 0
-    ).length
+interface IncidentByClassificationResponse {
+    incidents?: IncidentClassificationCountItem[]
+    status?: string
+    message?: string
+}
 
-    // Corrigé: On "aplatit" toutes les mesures de tous les incidents, PUIS on somme les coûts
-    const totalCost = incidents
-        .flatMap((i) => i.corrective_measures ?? []) // Gère si le tableau 'corrective_measures' est null
-        .reduce((sum, m) => sum + (m.cost ?? 0), 0) // Gère si 'm.cost' est null ou undefined
+interface RecentIncidentCardItem {
+    id: number
+    classification: string
+    startDate: Date | null
+    type: TypeEvent | null
+}
 
-    // Corrigé: 'start_date' est déjà un objet Date, pas besoin de 'new Date()'
-    const recentIncidents = [...incidents]
-        .sort((a, b) => b.start_date.getTime() - a.start_date.getTime())
-        .slice(0, 5)
+interface OrganizationListItem {
+    key: string
+    label: string
+    location: string
+    count: number
+}
 
-    const typeCounts = incidents.reduce(
-        (acc, incident) => {
-            acc[incident.type] = (acc[incident.type] || 0) + 1
-            return acc
-        },
-        {} as Record<TypeEvent, number>,
+async function fetchFromApi<T>(path: string): Promise<T | null> {
+    try {
+        const response = await fetch(`${API_BASE_URL}${path}`, {
+            headers: { accept: "application/json" },
+            cache: "no-store",
+        })
+
+        if (!response.ok) {
+            console.error(`Failed to fetch ${path}: ${response.status} ${response.statusText}`)
+            return null
+        }
+
+        return (await response.json()) as T
+    } catch (error) {
+        console.error(`Error fetching ${path}:`, error)
+        return null
+    }
+}
+
+function parseTypeEvent(type: string | null): TypeEvent | null {
+    if (!type) return null
+    return (Object.values(TypeEvent) as string[]).includes(type) ? (type as TypeEvent) : null
+}
+
+export default async function Dashboard() {
+    const [basicInfoRes, recentIncidentsRes, topOrganizationRes, incidentsByTypeRes, incidentsByClassificationRes] =
+        await Promise.all([
+            fetchFromApi<BasicInfoResponse>("/get_basic_info"),
+            fetchFromApi<MostRecentIncidentsResponse>("/get_most_recent_incidents"),
+            fetchFromApi<TopOrganizationResponse>("/get_top_organization"),
+            fetchFromApi<IncidentByTypeResponse>("/get_incident_by_type"),
+            fetchFromApi<IncidentByClassificationResponse>("/get_incident_by_classification"),
+        ])
+
+    const basicInfo = basicInfoRes?.data
+    const totalIncidents = basicInfo?.total_event_count ?? 0
+    const criticalIncidentsCount = basicInfo?.total_critical_risk_count ?? 0
+    const incidentsWithoutMeasures = basicInfo?.total_no_corrective_measure_count ?? 0
+    const totalCost = basicInfo?.total_corrective_measure_cost ?? 0
+
+    const recentIncidents: RecentIncidentCardItem[] = (recentIncidentsRes?.incidents ?? []).map(
+        (incident) => ({
+            id: incident.id,
+            classification: incident.classification ?? "Unclassified",
+            startDate: incident.start_datetime ? new Date(incident.start_datetime) : null,
+            type: parseTypeEvent(incident.type),
+        }),
     )
 
-    const sectorCounts = incidents.reduce(
-        (acc, incident) => {
-            const unit = incident.organization_unit
-            const key = unit?.identifier ?? "Unknown"
-
-            if (!acc[key]) {
-                acc[key] = {
-                    key,
-                    label: unit?.name ?? unit?.identifier ?? "Unknown sector",
-                    location: unit?.location ?? "Location unknown",
-                    count: 0,
-                }
-            }
-
-            acc[key].count += 1
-
-            if (unit?.location) {
-                if (acc[key].location === "Location unknown") {
-                    acc[key].location = unit.location
-                } else if (acc[key].location !== unit.location) {
-                    acc[key].location = "Multiple locations"
-                }
-            }
-
-            return acc
-        },
-        {} as Record<
-            string,
-            {
-                key: string
-                label: string
-                location: string
-                count: number
-            }
-        >,
+    const sectorsByOrganization: OrganizationListItem[] = (topOrganizationRes?.top_organization ?? []).map(
+        (entry) => ({
+            key: entry.organization.identifier ?? entry.organization.name ?? `org-${entry.organization.id}`,
+            label: entry.organization.name ?? entry.organization.identifier ?? "Unknown sector",
+            location: entry.organization.location ?? "Location unknown",
+            count: entry.value ?? 0,
+        }),
     )
 
-    const sectorsByOrganization = Object.values(sectorCounts)
+    const totalSectorCounts = sectorsByOrganization.reduce((sum, item) => sum + item.count, 0)
+    const sectorPercentageBase = totalIncidents > 0 ? totalIncidents : totalSectorCounts || 1
 
-    const classificationCounts = incidents.reduce(
-        (acc, incident) => {
-            const key = incident.classification || "Unclassified"
-            acc[key] = (acc[key] || 0) + 1
-            return acc
-        },
-        {} as Record<string, number>,
-    )
+    const typeData: DonutDatum[] =
+        (incidentsByTypeRes?.incidents_by_type ?? []).map((item) => ({
+            name: item.type ?? "Unknown",
+            value: item.value ?? 0,
+        })) || []
 
-    const classifications = Object.entries(classificationCounts).sort((a, b) => b[1] - a[1])
-    const topClassifications = classifications.slice(0, 5)
-
-    const typeData: DonutDatum[] = (Object.values(TypeEvent) as TypeEvent[]).map(type => ({
-        name: type,
-        value: typeCounts[type] ?? 0,
+    const classificationEntries = (incidentsByClassificationRes?.incidents ?? []).map((item) => ({
+        name: item.classification ?? "Unclassified",
+        value: item.value ?? 0,
     }))
-
+    const topClassifications = classificationEntries.slice(0, 5)
 
     return (
         <main className="min-h-screen bg-background">
@@ -135,7 +154,6 @@ export default function Dashboard() {
                     <p className="text-muted-foreground text-lg">Overview of incident reports and key metrics</p>
                 </div>
 
-                {/* Key Metrics */}
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
                     <Card className="gap-4">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -154,7 +172,6 @@ export default function Dashboard() {
                             <AlertCircle className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            {/* Corrigé: Utilisation de la nouvelle variable */}
                             <div className="text-3xl font-bold text-red-600">{criticalIncidentsCount}</div>
                             <p className="text-xs text-muted-foreground mt-1">Incidents with critical risks</p>
                         </CardContent>
@@ -177,19 +194,23 @@ export default function Dashboard() {
                             <DollarSign className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold text-green-600">${totalCost.toLocaleString()}</div>
+                            <div className="text-3xl font-bold text-green-600">
+                                ${Number(totalCost || 0).toLocaleString()}
+                            </div>
                             <p className="text-xs text-muted-foreground mt-1">Across all measures</p>
                         </CardContent>
                     </Card>
                 </div>
 
                 <div className="grid gap-6 lg:grid-cols-2 mb-8">
-                    {/* Recent Incidents */}
                     <Card>
                         <CardHeader>
                             <CardTitle>Recent Incidents</CardTitle>
                         </CardHeader>
-                            <CardContent>
+                        <CardContent>
+                            {recentIncidents.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No recent incidents available.</p>
+                            ) : (
                                 <div className="flex flex-col gap-4">
                                     {recentIncidents.map((incident) => (
                                         <Link key={incident.id} href={`/incident/${incident.id}`}>
@@ -202,24 +223,32 @@ export default function Dashboard() {
                                                 </div>
                                                 <div className="flex flex-col items-end gap-1">
                                                     <span className="text-sm text-muted-foreground">
-                                                        {incident.start_date.toLocaleDateString()}
+                                                        {incident.startDate
+                                                            ? incident.startDate.toLocaleDateString()
+                                                            : "Date unavailable"}
                                                     </span>
-                                                    <Badge variant="outline" className={`${getTypeColor(incident.type)}`}>
-                                                        {incident.type}
-                                                    </Badge>
+                                                    {incident.type && (
+                                                        <Badge variant="outline" className={getTypeColor(incident.type)}>
+                                                            {incident.type}
+                                                        </Badge>
+                                                    )}
                                                 </div>
                                             </div>
                                         </Link>
                                     ))}
                                 </div>
-                            </CardContent>
-                        </Card>
+                            )}
+                        </CardContent>
+                    </Card>
 
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Incidents by Organization Sector</CardTitle>
-                            </CardHeader>
-                            <CardContent>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Incidents by Organization Sector</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {sectorsByOrganization.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No organization data available.</p>
+                            ) : (
                                 <ul className="flex flex-col gap-3">
                                     {sectorsByOrganization.map(({ key, label, location, count }) => (
                                         <li
@@ -234,7 +263,12 @@ export default function Dashboard() {
                                                 <div className="w-24 h-2 bg-muted rounded-full overflow-hidden" aria-hidden>
                                                     <div
                                                         className="h-full bg-primary rounded-full"
-                                                        style={{ width: `${(count / totalIncidents) * 100}%` }}
+                                                        style={{
+                                                            width: `${Math.min(
+                                                                100,
+                                                                (count / sectorPercentageBase) * 100,
+                                                            ).toFixed(0)}%`,
+                                                        }}
                                                     />
                                                 </div>
                                                 <span className="text-lg font-bold text-foreground">{count}</span>
@@ -242,8 +276,9 @@ export default function Dashboard() {
                                         </li>
                                     ))}
                                 </ul>
-                            </CardContent>
-                        </Card>
+                            )}
+                        </CardContent>
+                    </Card>
                 </div>
 
                 <div className="grid gap-6 lg:grid-cols-2 mb-8">
@@ -252,39 +287,46 @@ export default function Dashboard() {
                             <CardTitle>Incidents by Type</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <IncidentsByTypeDonut data={typeData} />
+                            {typeData.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No incident type data available.</p>
+                            ) : (
+                                <IncidentsByTypeDonut data={typeData} />
+                            )}
                         </CardContent>
                     </Card>
 
                     <Card className="gap-2">
                         <CardHeader>
                             <CardTitle>Incidents by Classification</CardTitle>
-                            <p className="text-sm text-muted-foreground">
-                                Top classifications by total incidents
-                            </p>
+                            <p className="text-sm text-muted-foreground">Top classifications by total incidents</p>
                         </CardHeader>
                         <CardContent>
-                            <ul className="flex flex-col gap-3">
-                                {topClassifications.map(([classification, count]) => (
-                                    <li
-                                        key={classification}
-                                        className="flex items-center justify-between rounded-lg border bg-card px-4 py-3"
-                                    >
-                                        <span className="font-medium text-foreground">{classification}</span>
-                                        <span className="text-lg font-semibold text-primary">{count}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                            {classifications.length > topClassifications.length ? (
-                                <p className="mt-3 text-xs text-muted-foreground">
-                                    Showing top {topClassifications.length} classifications. More data may add new entries.
-                                </p>
-                            ) : null}
+                            {topClassifications.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No classification data available.</p>
+                            ) : (
+                                <>
+                                    <ul className="flex flex-col gap-3">
+                                        {topClassifications.map(({ name, value }) => (
+                                            <li
+                                                key={name}
+                                                className="flex items-center justify-between rounded-lg border bg-card px-4 py-3"
+                                            >
+                                                <span className="font-medium text-foreground">{name}</span>
+                                                <span className="text-lg font-semibold text-primary">{value}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    {(incidentsByClassificationRes?.incidents?.length ?? 0) > topClassifications.length ? (
+                                        <p className="mt-3 text-xs text-muted-foreground">
+                                            Showing top {topClassifications.length} classifications. More data may add new
+                                            entries.
+                                        </p>
+                                    ) : null}
+                                </>
+                            )}
                         </CardContent>
                     </Card>
                 </div>
-
-                
             </div>
         </main>
     )

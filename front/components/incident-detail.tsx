@@ -69,9 +69,10 @@ export function IncidentDetail({ incident, linkedEmployees, risks, correctiveMea
                                 {incident.classification}
                             </Badge>
                         </div>
+                        {incident.type &&
                         <Badge variant="outline" className={`${getTypeColor(incident.type)} text-lg px-4 py-2`}>
                             {incident.type}
-                        </Badge>
+                        </Badge>}
                     </div>
                 </div>
 
@@ -93,7 +94,7 @@ export function IncidentDetail({ incident, linkedEmployees, risks, correctiveMea
                                 <Calendar className="h-5 w-5 text-muted-foreground mt-1" />
                                 <div>
                                     <div className="text-sm font-medium text-muted-foreground mb-1">Start Date</div>
-                                    <div className="font-medium">{format(incident.start_date, "MMMM dd, yyyy 'at' HH:mm")}</div>
+                                    {incident.start_datetime && <div className="font-medium">{format(incident.start_datetime, "MMMM dd, yyyy 'at' HH:mm")}</div>}
                                 </div>
                             </div>
                             <div className="flex items-start gap-3">
@@ -112,9 +113,9 @@ export function IncidentDetail({ incident, linkedEmployees, risks, correctiveMea
                                 <User className="h-5 w-5 text-muted-foreground mt-1" />
                                 <div>
                                     <div className="text-sm font-medium text-muted-foreground mb-1">Reported By</div>
-                                    <div className="font-semibold text-lg">{incident.reporter.name} {incident.reporter.family_name}</div>
+                                    <div className="font-semibold text-lg">{incident.person?.name} {incident.person?.family_name}</div>
                                     <div className="text-sm text-muted-foreground mt-1">
-                                        <span className="font-medium">Matricule:</span> {incident.reporter.matricule}
+                                        <span className="font-medium">Matricule:</span> {incident.person?.matricule}
                                     </div>
                                 </div>
                             </div>
@@ -122,9 +123,9 @@ export function IncidentDetail({ incident, linkedEmployees, risks, correctiveMea
                                 <Briefcase className="h-5 w-5 text-muted-foreground mt-1" />
                                 <div>
                                     <div className="text-sm font-medium text-muted-foreground mb-1">Organizational Unit</div>
-                                    <div className="font-medium">{incident.organization_unit?.name ?? "Unknown"}</div>
+                                    <div className="font-medium">{incident.organizational_unit?.name ?? "Unknown"}</div>
                                     <div className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
-                                        <MapPin className="h-4 w-4" /> {incident.organization_unit?.location ?? "Unknown"}
+                                        <MapPin className="h-4 w-4" /> {incident.organizational_unit?.location ?? "Unknown"}
                                     </div>
                                 </div>
                             </div>
@@ -156,11 +157,11 @@ export function IncidentDetail({ incident, linkedEmployees, risks, correctiveMea
                                             <p className="text-sm text-foreground leading-relaxed mb-3">{measure.description}</p>
                                             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                                                 <Clock className="h-4 w-4" />
-                                                <span>Due: {format(measure.implementation_date, "MMMM dd, yyyy")}</span>
+                                                <span>Due: {format(measure.implementation, "MMMM dd, yyyy")}</span>
                                             </div>
                                             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
                                                 <Briefcase className="h-4 w-4" />
-                                                <span>Unit: {measure.organization_unit.name}</span>
+                                                <span>Unit: {measure.organization_unit?.name}</span>
                                             </div>
                                             <Separator className="my-3" />
                                             <div className="flex items-center justify-between text-sm">

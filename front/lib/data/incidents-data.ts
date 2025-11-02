@@ -1,14 +1,14 @@
 export interface Incident {
     id: number
-    type: TypeEvent
-    classification: ClassificationEvent
-    start_date: Date
+    type: TypeEvent | null
+    classification: ClassificationEvent | null
+    start_datetime: Date | null
     end_date: Date | null
-    description: string
-    reporter : Person
-    linked_employees: LinkedEmployee[] | null
+    description: string | null
+    person : Person | null
+    employees: LinkedEmployee[] | null
     corrective_measures: CorrectiveMeasure[] | null
-    organization_unit: OrganizationalUnit | null
+    organizational_unit: OrganizationalUnit | null
     risks: Risk[] | null
 }
 
@@ -66,7 +66,7 @@ export interface CorrectiveMeasure {
     id: number
     name: string
     description: string
-    implementation_date: Date
+    implementation: Date
     owner: Person
     organization_unit: OrganizationalUnit
     cost: number
@@ -106,13 +106,13 @@ export const incidents: Incident[] = [
         id: 1,
         type: TypeEvent.DAMAGE, // "Equipment Failure"
         classification: ClassificationEvent.INJURY,
-        start_date: new Date("2024-01-15T08:30:00Z"),
+        start_datetime: new Date("2024-01-15T08:30:00Z"),
         end_date: new Date("2024-01-15T12:00:00Z"),
         description: "Injection molding machine malfunction causing production halt",
-        reporter: personJohnSmith,
-        organization_unit: { ...unitProd, location: "Production Line A - Station 3" },
+        person: personJohnSmith,
+        organizational_unit: { ...unitProd, location: "Production Line A - Station 3" },
 
-        linked_employees: [
+        employees: [
             {
                 linked_person: personMikeJohnson,
                 involvement_type: "responder" // ancien "role"
@@ -143,7 +143,7 @@ export const incidents: Incident[] = [
                 id: 1,
                 name: "Machine Repair",
                 description: "Replace faulty hydraulic pump and test all systems",
-                implementation_date: new Date("2024-01-16T09:00:00Z"),
+                implementation: new Date("2024-01-16T09:00:00Z"),
                 owner: personMikeJohnson, // ancienne string "Mike Johnson (Maintenance)"
                 organization_unit: unitMaint,
                 cost: 3500.0
@@ -152,7 +152,7 @@ export const incidents: Incident[] = [
                 id: 2,
                 name: "Preventive Maintenance Schedule",
                 description: "Implement weekly inspection protocol for all injection molding machines",
-                implementation_date: new Date("2024-01-22T09:00:00Z"),
+                implementation: new Date("2024-01-22T09:00:00Z"),
                 owner: personTomAnderson, // ancienne string "Tom Anderson (Maintenance Manager)"
                 organization_unit: unitMaint,
                 cost: 1200.0
@@ -165,13 +165,13 @@ export const incidents: Incident[] = [
         id: 2,
         type: TypeEvent.EHS, // "Safety Incident"
         classification: ClassificationEvent.FIRST_AID,
-        start_date: new Date("2024-01-20T14:15:00Z"),
+        start_datetime: new Date("2024-01-20T14:15:00Z"),
         end_date: new Date("2024-01-20T14:45:00Z"),
         description: "Worker exposed to chemical fumes due to ventilation system failure",
-        reporter: personSarahJohnson,
-        organization_unit: { ...unitSafety, location: "Chemical Storage Area B" },
+        person: personSarahJohnson,
+        organizational_unit: { ...unitSafety, location: "Chemical Storage Area B" },
 
-        linked_employees: [
+        employees: [
             {
                 linked_person: personTomWilson,
                 involvement_type: "victim"
@@ -208,7 +208,7 @@ export const incidents: Incident[] = [
                 id: 3,
                 name: "Ventilation System Upgrade",
                 description: "Install backup ventilation system and improve air monitoring",
-                implementation_date: new Date("2024-01-28T09:00:00Z"),
+                implementation: new Date("2024-01-28T09:00:00Z"),
                 owner: personAnnaDavis,
                 organization_unit: unitMaint,
                 cost: 15000.0
@@ -217,7 +217,7 @@ export const incidents: Incident[] = [
                 id: 4,
                 name: "Safety Training",
                 description: "Conduct emergency response training for all chemical area workers",
-                implementation_date: new Date("2024-02-01T10:00:00Z"),
+                implementation: new Date("2024-02-01T10:00:00Z"),
                 owner: personSarahJohnson, // La reporter est aussi propriétaire de la mesure
                 organization_unit: unitSafety,
                 cost: 2500.0
@@ -226,7 +226,7 @@ export const incidents: Incident[] = [
                 id: 5,
                 name: "PPE Enhancement",
                 description: "Provide upgraded respiratory protection equipment",
-                implementation_date: new Date("2024-01-25T09:00:00Z"),
+                implementation: new Date("2024-01-25T09:00:00Z"),
                 owner: personAnnaDavis,
                 organization_unit: unitSafety,
                 cost: 4200.0
@@ -239,13 +239,13 @@ export const incidents: Incident[] = [
         id: 3,
         type: TypeEvent.DAMAGE, // "Quality Issue"
         classification: ClassificationEvent.NEAR_MISS,
-        start_date: new Date("2024-01-25T10:00:00Z"),
+        start_datetime: new Date("2024-01-25T10:00:00Z"),
         end_date: new Date("2024-01-25T11:30:00Z"),
         description: "Batch of plastic containers failed quality inspection due to improper cooling",
-        reporter: personMichaelChen,
-        organization_unit: { ...unitQuality, location: "Quality Control Lab" },
+        person: personMichaelChen,
+        organizational_unit: { ...unitQuality, location: "Quality Control Lab" },
 
-        linked_employees: [
+        employees: [
             {
                 linked_person: personJamesMiller,
                 involvement_type: "responder"
@@ -272,7 +272,7 @@ export const incidents: Incident[] = [
                 id: 6,
                 name: "Cooling System Calibration",
                 description: "Recalibrate cooling parameters and add monitoring sensors",
-                implementation_date: new Date("2024-01-26T14:00:00Z"),
+                implementation: new Date("2024-01-26T14:00:00Z"),
                 owner: personJamesMiller, // Le 'responder' est aussi 'owner'
                 organization_unit: unitMaint,
                 cost: 1800.0
@@ -281,7 +281,7 @@ export const incidents: Incident[] = [
                 id: 7,
                 name: "Process Documentation Update",
                 description: "Revise cooling procedures and operator guidelines",
-                implementation_date: new Date("2024-01-27T09:00:00Z"),
+                implementation: new Date("2024-01-27T09:00:00Z"),
                 owner: personMichaelChen, // Le 'reporter' est aussi 'owner'
                 organization_unit: unitQuality,
                 cost: 500.0
@@ -294,13 +294,13 @@ export const incidents: Incident[] = [
         id: 4,
         type: TypeEvent.ENVIRONMENT, // "Environmental"
         classification: ClassificationEvent.INJURY,
-        start_date: new Date("2024-02-01T16:00:00Z"),
+        start_datetime: new Date("2024-02-01T16:00:00Z"),
         end_date: new Date("2024-02-01T18:30:00Z"),
         description: "Plastic pellet spill in loading dock area",
-        reporter: personEmilyRodriguez,
-        organization_unit: { ...unitLogistics, location: "Loading Dock 2" },
+        person: personEmilyRodriguez,
+        organizational_unit: { ...unitLogistics, location: "Loading Dock 2" },
 
-        linked_employees: [
+        employees: [
             {
                 linked_person: personMariaGarcia,
                 involvement_type: "responder"
@@ -327,7 +327,7 @@ export const incidents: Incident[] = [
                 id: 8,
                 name: "Spill Cleanup",
                 description: "Professional cleanup and disposal of spilled materials",
-                implementation_date: new Date("2024-02-02T08:00:00Z"),
+                implementation: new Date("2024-02-02T08:00:00Z"),
                 owner: personMariaGarcia,
                 organization_unit: unitSafety,
                 cost: 8500.0
@@ -336,7 +336,7 @@ export const incidents: Incident[] = [
                 id: 9,
                 name: "Containment System Installation",
                 description: "Install spill containment barriers in loading dock area",
-                implementation_date: new Date("2024-02-10T09:00:00Z"),
+                implementation: new Date("2024-02-10T09:00:00Z"),
                 owner: personDavidWilson,
                 organization_unit: unitMaint,
                 cost: 6200.0
@@ -345,7 +345,7 @@ export const incidents: Incident[] = [
                 id: 10,
                 name: "Loading Procedures Review",
                 description: "Update material handling procedures and train staff",
-                implementation_date: new Date("2024-02-05T09:00:00Z"),
+                implementation: new Date("2024-02-05T09:00:00Z"),
                 owner: personEmilyRodriguez,
                 organization_unit: unitLogistics,
                 cost: 1500.0

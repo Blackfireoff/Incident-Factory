@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Input } from "@/components/ui/input"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -10,12 +10,10 @@ import { Search, ChevronLeft, ChevronRight, Filter } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { AdvancedFilters } from "@/components/advanced-filters"
-import { incidents as allIncidents, type Incident } from "@/lib/data/incidents-data"
-import {getTypeColor} from "@/lib/utils";
+import { ClassificationEvent, TypeEvent, type Incident } from "@/lib/data/incidents-data"
+import { getTypeColor } from "@/lib/utils"
 
-interface IncidentsTableProps {
-    totalCount: number
-}
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 const ITEMS_PER_PAGE = 20
 
@@ -33,12 +31,31 @@ interface Filters {
     endYear: string
 }
 
-export function IncidentsTable({ totalCount: initialCount }: IncidentsTableProps) {
+interface ApiReporter {
+    id: number
+    matricule: string | null
+    name: string | null
+    family_name: string | null
+    role: string | null
+}
+
+interface ApiEvent {
+    id: number
+    type: string | null
+    classification: string | null
+    start_date: string | null
+    end_date: string | null
+    description: string | null
+    reporter: ApiReporter | null
+}
+
+export function IncidentsTable() {
     const [incidents, setIncidents] = useState<Incident[]>([])
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [totalAvailable, setTotalAvailable] = useState(0)
     const [searchTerm, setSearchTerm] = useState("")
     const [currentPage, setCurrentPage] = useState(1)
-    const [totalCount, setTotalCount] = useState(initialCount)
     const [showFilters, setShowFilters] = useState(false)
     const [filters, setFilters] = useState<Filters>({
         eventId: "",
@@ -55,87 +72,175 @@ export function IncidentsTable({ totalCount: initialCount }: IncidentsTableProps
     const router = useRouter()
 
     useEffect(() => {
-        fetchIncidents()
-    }, [currentPage, searchTerm, filters])
+        let ignore = false
+        const controller = new AbortController()
 
-    function fetchIncidents() {
-        setLoading(true)
+        async function fetchAllIncidents() {
+            setLoading(true)
+            setError(null)
 
-        let filtered = [...allIncidents]
+            try {
+                const aggregated: Incident[] = []
+                let offset = 0
+                let hasMore = true
+                const maxIterations = 50
+                let iteration = 0
+                let totalCountFromApi: number | null = null
 
-        // Apply search term
+                while (hasMore && !ignore) {
+                    const response = await fetch(`${API_BASE_URL}/get_events?offset=${offset}`, {
+                        headers: { accept: "application/json" },
+                        cache: "no-store",
+                        signal: controller.signal,
+                    })
+
+                    if (!response.ok) {
+                        const message = await response.text()
+                        throw new Error(`Failed to fetch incidents (status ${response.status}): ${message}`)
+                    }
+
+                    const data = (await response.json()) as {
+                        events?: ApiEvent[]
+                        count?: number
+                        total_count?: number
+                    }
+
+                    if (typeof data.total_count === "number") {
+                        totalCountFromApi = data.total_count
+                    }
+
+                    const events = Array.isArray(data.events) ? data.events : []
+                    aggregated.push(
+                        ...events.map<Incident>((event) => {
+                            const asType = (value: string | null): TypeEvent | null => {
+                                if (!value) return null
+                                return (Object.values(TypeEvent) as string[]).includes(value)
+                                    ? (value as TypeEvent)
+                                    : null
+                            }
+
+                            const asClassification = (value: string | null): ClassificationEvent | null => {
+                                if (!value) return null
+                                return (Object.values(ClassificationEvent) as string[]).includes(value)
+                                    ? (value as ClassificationEvent)
+                                    : null
+                            }
+
+                            return {
+                                id: event.id,
+                                type: asType(event.type),
+                                classification: asClassification(event.classification),
+                                start_datetime: event.start_date ? new Date(event.start_date) : null,
+                                end_date: event.end_date ? new Date(event.end_date) : null,
+                                description: event.description ?? null,
+                                person: event.reporter
+                                    ? {
+                                        id: event.reporter.id,
+                                        matricule: event.reporter.matricule ?? "",
+                                        name: event.reporter.name ?? "",
+                                        family_name: event.reporter.family_name ?? "",
+                                        role: event.reporter.role ?? null,
+                                    }
+                                    : null,
+                                employees: null,
+                                corrective_measures: null,
+                                organizational_unit: null,
+                                risks: null,
+                            }
+                        }),
+                    )
+
+                    iteration += 1
+                    if (!data.count || data.count < ITEMS_PER_PAGE || iteration >= maxIterations) {
+                        hasMore = false
+                    } else {
+                        offset += ITEMS_PER_PAGE
+                    }
+                }
+
+                if (!ignore) {
+                    setIncidents(aggregated)
+                    setTotalAvailable(totalCountFromApi ?? aggregated.length)
+                }
+            } catch (fetchError) {
+                if (!ignore) {
+                    console.error("Error fetching incidents:", fetchError)
+                    setError("Une erreur est survenue lors de la récupération des incidents.")
+                    setIncidents([])
+                }
+            } finally {
+                if (!ignore) {
+                    setLoading(false)
+                }
+            }
+        }
+
+        void fetchAllIncidents()
+
+        return () => {
+            ignore = true
+            controller.abort()
+        }
+    }, [])
+
+    const filteredIncidents = useMemo(() => {
+        let dataset = incidents
+
         if (searchTerm) {
             const term = searchTerm.toLowerCase()
-            filtered = filtered.filter(
-                (i) =>
-                    // Corrigé: Recherche dans l'objet reporter
-                    i.reporter.matricule.toLowerCase().includes(term) ||
-                    i.reporter.name.toLowerCase().includes(term) ||
-                    i.reporter.family_name.toLowerCase().includes(term) ||
-                    i.type.toLowerCase().includes(term) ||
-                    i.classification.toLowerCase().includes(term) ||
-                    i.description.toLowerCase().includes(term),
-            )
+            dataset = dataset.filter((incident) => {
+                const person = incident.person
+                const matchesReporter =
+                    person &&
+                    [
+                        person.matricule,
+                        person.name,
+                        person.family_name,
+                    ]
+                        .filter(Boolean)
+                        .some((value) => value!.toLowerCase().includes(term))
+
+                const matchesType = incident.type?.toLowerCase().includes(term) ?? false
+                const matchesClassification = incident.classification?.toLowerCase().includes(term) ?? false
+                const matchesDescription = incident.description?.toLowerCase().includes(term) ?? false
+
+                return matchesReporter || matchesType || matchesClassification || matchesDescription
+            })
         }
 
-        // Apply filters
-        if (filters.eventId) {
-            // Corrigé: i.id est un nombre, on le convertit en string pour 'includes'
-            filtered = filtered.filter((i) => i.id.toString().includes(filters.eventId))
-        }
-        if (filters.employeeMatricule) {
-            // Corrigé: Filtre sur le matricule du reporter
-            filtered = filtered.filter((i) =>
-                i.reporter.matricule.toLowerCase().includes(filters.employeeMatricule.toLowerCase()),
-            )
-        }
-        if (filters.type) {
-            filtered = filtered.filter((i) => i.type === filters.type)
-        }
-        if (filters.classification) {
-            filtered = filtered.filter((i) => i.classification === filters.classification)
-        }
-        // Corrigé: i.start_date est déjà un objet Date, pas besoin de 'new Date()'
-        if (filters.startDate) {
-            filtered = filtered.filter((i) => i.start_date >= filters.startDate!)
-        }
-        if (filters.endDate) {
-            filtered = filtered.filter((i) => i.start_date <= filters.endDate!)
-        }
-        if (filters.startMonth) {
-            filtered = filtered.filter((i) => i.start_date >= filters.startMonth!)
-        }
-        if (filters.endMonth) {
-            const endOfMonth = new Date(filters.endMonth)
-            endOfMonth.setMonth(endOfMonth.getMonth() + 1)
-            endOfMonth.setDate(0)
-            filtered = filtered.filter((i) => i.start_date <= endOfMonth)
-        }
-        if (filters.startYear) {
-            // Corrigé: i.start_date.getFullYear()
-            filtered = filtered.filter((i) => i.start_date.getFullYear() >= Number.parseInt(filters.startYear))
-        }
-        if (filters.endYear) {
-            // Corrigé: i.start_date.getFullYear()
-            filtered = filtered.filter((i) => i.start_date.getFullYear() <= Number.parseInt(filters.endYear))
-        }
+        // Placeholder for future filter logic
+        return dataset
+    }, [incidents, searchTerm, filters])
 
-        // Sort by date descending
-        // Corrigé: .start_date est déjà un objet Date
-        filtered.sort((a, b) => b.start_date.getTime() - a.start_date.getTime())
-
-        setTotalCount(filtered.length)
-
-        // Paginate
+    const filteredCount = filteredIncidents.length
+    const hasSearch = searchTerm.trim().length > 0
+    const hasAdvancedFilters = Object.entries(filters).some(([key, value]) => {
+        if (
+            key === "startDate" ||
+            key === "endDate" ||
+            key === "startMonth" ||
+            key === "endMonth"
+        ) {
+            return value instanceof Date
+        }
+        return typeof value === "string" ? value.trim().length > 0 : false
+    })
+    const baseTotalCount = totalAvailable || filteredCount
+    const totalCount = hasSearch || hasAdvancedFilters ? filteredCount : baseTotalCount
+    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE) || 1
+    const paginatedIncidents = useMemo(() => {
         const start = (currentPage - 1) * ITEMS_PER_PAGE
-        const end = start + ITEMS_PER_PAGE
-        setIncidents(filtered.slice(start, end))
+        return filteredIncidents.slice(start, start + ITEMS_PER_PAGE)
+    }, [filteredIncidents, currentPage])
+    const rangeStart = totalCount === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1
+    const rangeEndBase = hasSearch || hasAdvancedFilters ? filteredCount : totalCount
+    const rangeEnd = totalCount === 0 ? 0 : Math.min(currentPage * ITEMS_PER_PAGE, rangeEndBase)
 
-        setLoading(false)
-    }
-
-    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE)
-
+    useEffect(() => {
+        if (currentPage > totalPages) {
+            setCurrentPage(Math.max(1, totalPages))
+        }
+    }, [currentPage, totalPages])
 
     const handleSearch = (value: string) => {
         setSearchTerm(value)
@@ -155,11 +260,21 @@ export function IncidentsTable({ totalCount: initialCount }: IncidentsTableProps
             </CardHeader>
             <CardContent>
                 <div className="mb-6 space-y-4">
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center">
                         <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
                             <Filter className="h-4 w-4 mr-2" />
                             {showFilters ? "Hide Filters" : "Show Filters"}
                         </Button>
+                        <div className="relative w-full md:ml-auto md:max-w-sm">
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                value={searchTerm}
+                                onChange={(event) => handleSearch(event.target.value)}
+                                placeholder="Search by reporter, type, classification or description"
+                                className="pl-9"
+                                aria-label="Search incidents"
+                            />
+                        </div>
                     </div>
 
                     {showFilters && <AdvancedFilters filters={filters} onFilterChange={handleFilterChange} />}
@@ -169,7 +284,11 @@ export function IncidentsTable({ totalCount: initialCount }: IncidentsTableProps
                     <div className="flex items-center justify-center py-12">
                         <div className="text-muted-foreground">Loading incidents...</div>
                     </div>
-                ) : incidents.length === 0 ? (
+                ) : error ? (
+                    <div className="flex items-center justify-center py-12">
+                        <div className="text-muted-foreground">{error}</div>
+                    </div>
+                ) : filteredCount === 0 ? (
                     <div className="flex items-center justify-center py-12">
                         <div className="text-muted-foreground">No incidents found</div>
                     </div>
@@ -188,7 +307,7 @@ export function IncidentsTable({ totalCount: initialCount }: IncidentsTableProps
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {incidents.map((incident) => (
+                                    {paginatedIncidents.map((incident) => (
                                         <TableRow
                                             key={incident.id}
                                             className="cursor-pointer hover:bg-accent/50 transition-colors"
@@ -199,13 +318,16 @@ export function IncidentsTable({ totalCount: initialCount }: IncidentsTableProps
 
                                             {/* Corrigé: Affiche le nom et le matricule du reporter */}
                                             <TableCell>
-                                                <div className="font-medium">{incident.reporter.name} {incident.reporter.family_name}</div>
-                                                <div className="text-xs text-muted-foreground">{incident.reporter.matricule}</div>
+                                                <div className="font-medium">{incident.person?.name} {incident.person?.family_name}</div>
+                                                <div className="text-xs text-muted-foreground">{incident.person?.matricule}</div>
                                             </TableCell>
 
-                                            <TableCell><Badge variant="outline" className={getTypeColor(incident.type)}>
-                                                {incident.type}
-                                            </Badge></TableCell>
+                                            <TableCell>
+                                                {incident.type &&
+                                                <Badge variant="outline" className={getTypeColor(incident.type)}>
+                                                    {incident.type}
+                                                </Badge>}
+                                            </TableCell>
                                             <TableCell>
                                                 <Badge variant="secondary" className="bg-primary/10 text-primary">
                                                     {incident.classification}
@@ -213,7 +335,7 @@ export function IncidentsTable({ totalCount: initialCount }: IncidentsTableProps
                                             </TableCell>
 
                                             {/* Corrigé: 'start_date' est déjà une Date */}
-                                            <TableCell>{format(incident.start_date, "MMM dd, yyyy HH:mm")}</TableCell>
+                                            {incident.start_datetime && <TableCell>{format(incident.start_datetime, "MMM dd, yyyy HH:mm")}</TableCell>}
 
                                             {/* Corrigé: 'end_date' est déjà une Date */}
                                             <TableCell>
@@ -227,8 +349,13 @@ export function IncidentsTable({ totalCount: initialCount }: IncidentsTableProps
 
                         <div className="flex items-center justify-between mt-6">
                             <div className="text-sm text-muted-foreground">
-                                Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, totalCount)}{" "}
-                                of {totalCount} incidents
+                                {filteredCount === 0 ? (
+                                    "Showing 0 incidents"
+                                ) : (
+                                    <>
+                                        Showing {rangeStart} to {rangeEnd} of {totalCount} incidents
+                                    </>
+                                )}
                             </div>
                             <div className="flex items-center gap-2">
                                 <Button

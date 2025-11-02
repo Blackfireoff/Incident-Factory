@@ -12,7 +12,12 @@ from typing import List, Optional, Tuple
 import re
 import unicodedata
 from services.bedrock_service import MODEL_ID
+from fastapi.middleware.cors import CORSMiddleware
 
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 
 from search_engine import (
     get_opensearch_client,
@@ -473,6 +478,14 @@ INDEX_NAME = "incidents"
 app = FastAPI(title="FireTeams API")
 chat_service = BedrockChatService()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,     # évite "*" si tu utilises des cookies/credentials
+    allow_credentials=True,    # mets False si tu veux pouvoir utiliser "*"
+    allow_methods=["*"],       # GET, POST, PUT, DELETE, OPTIONS…
+    allow_headers=["*"],       # Autorise tous les headers (dont Content-Type, Authorization, etc.)
+)
+
 # Fonction pour convertir les datetime, date et Decimal en types JSON-serialisables
 def convert_datetime_to_str(obj):
     """Convertit les objets datetime, date et Decimal en types JSON-serialisables"""
@@ -799,41 +812,48 @@ async def get_events(offset: int = 0):
             ORDER BY e.event_id
             LIMIT 20 OFFSET %s;
         """, params=(offset,))
+
+        total_count = query_db("""
+        SELECT COUNT(*) as Total_event FROM event;
+        """)
         
-        # Transformer les résultats pour correspondre à l'interface Incident
-        incidents = []
+        # Transformer les résultats pour correspondre à l'interface Incident simplifiée
+        events_payload: list[dict] = []
         for event in events:
-            incident = {
-                "id": event['event_id'],
-                "type": event['type'],
-                "classification": event['classification'],
-                "start_date": event['start_datetime'],
-                "end_date": event['end_datetime'],
-                "description": event['description'],
-                "reporter": None
-            }
-            
-            # Construire l'objet Person si la personne existe
-            if event['person_id']:
-                incident["reporter"] = {
-                    "id": event['person_id'],
-                    "matricule": event['matricule'],
-                    "name": event['name'],
-                    "family_name": event['family_name'],
-                    "role": event['role']
+            reporter = None
+            if event["person_id"]:
+                reporter = {
+                    "id": event["person_id"],
+                    "matricule": event["matricule"],
+                    "name": event["name"],
+                    "family_name": event["family_name"],
+                    "role": event["role"],
                 }
-            
-            incidents.append(incident)
-        
+
+            events_payload.append(
+                {
+                    "id": event["event_id"],
+                    "type": event["type"],
+                    "classification": event["classification"],
+                    "start_datetime": event["start_datetime"],
+                    "end_datetime": event["end_datetime"],
+                    "description": event["description"],
+                    "reporter": reporter,
+                }
+            )
+
         # Convertir les datetime en strings pour la sérialisation JSON
-        incidents_serializable = convert_datetime_to_str(incidents)
-        
-        return JSONResponse({
-            "status": "success",
-            "offset": offset,
-            "count": len(incidents_serializable),
-            "events": incidents_serializable
-        })
+        events_serializable = convert_datetime_to_str(events_payload)
+
+        return JSONResponse(
+            {
+                "status": "success",
+                "offset": offset,
+                "total_count": total_count[0]["total_event"],
+                "count": len(events_serializable),
+                "events": events_serializable,
+            }
+        )
     except Exception as e:
         return JSONResponse(
             status_code=500,
@@ -936,8 +956,8 @@ async def get_most_recent_incidents(limit: int = 5):
                 "id": event["event_id"],
                 "type": event["type"],
                 "classification": event["classification"],
-                "start_date": event["start_datetime"],
-                "end_date": event["end_datetime"],
+                "start_datetime": event["start_datetime"],
+                "end_datetime": event["end_datetime"],
                 "reporter": None,
             }
 
@@ -1077,7 +1097,7 @@ async def get_incident_by_classification(limit: int = 5):
 
         payload = [
             {
-                "type": row["classification"],
+                "classification": row["classification"],
                 "value": row["total"],
             }
             for row in rows
@@ -1128,6 +1148,7 @@ async def get_event_details(event_id: int):
         employees = query_db("""
             SELECT 
                 ee.person_id,
+                ee.involvement_type,
                 p.matricule,
                 p.name,
                 p.family_name
@@ -1159,10 +1180,15 @@ async def get_event_details(event_id: int):
                 cm.owner_id,
                 p_owner.matricule AS owner_matricule,
                 p_owner.name AS owner_name,
-                p_owner.family_name AS owner_family_name
+                p_owner.family_name AS owner_family_name,
+                cm_ou.unit_id AS cm_ou_unit_id,
+                cm_ou.identifier AS cm_ou_identifier,
+                cm_ou.name AS cm_ou_name,
+                cm_ou.location AS cm_ou_location
             FROM event_corrective_measure ecm
             INNER JOIN corrective_measure cm ON ecm.measure_id = cm.measure_id
             INNER JOIN person p_owner ON cm.owner_id = p_owner.person_id
+            LEFT JOIN organizational_unit cm_ou ON cm.organizational_unit_id = cm_ou.unit_id
             WHERE ecm.event_id = %s;
         """, params=(event_id,))
         
@@ -1206,10 +1232,14 @@ async def get_event_details(event_id: int):
             },
             "employees": [
                 {
-                    "id": emp['person_id'],
-                    "matricule": emp['matricule'],
-                    "name": emp['name'],
-                    "family_name": emp['family_name']
+                    "linked_person" : {
+                        "id": emp['person_id'],
+                        "matricule": emp['matricule'],
+                        "name": emp['name'],
+                        "family_name": emp['family_name']
+                    },
+                    "involvement_type" : emp['involvement_type']
+                    
                 }
                 for emp in (employees if employees else [])
             ],
@@ -1231,7 +1261,13 @@ async def get_event_details(event_id: int):
                         "matricule": cm['owner_matricule'],
                         "name": cm['owner_name'],
                         "family_name": cm['owner_family_name']
-                    }
+                    },
+                    "organization_unit": {
+                        "id": cm['cm_ou_unit_id'],
+                        "identifier": cm['cm_ou_identifier'],
+                        "name": cm['cm_ou_name'],
+                        "location": cm['cm_ou_location'],
+                    } if cm['cm_ou_unit_id'] is not None else None
                 }
                 for cm in (corrective_measures if corrective_measures else [])
             ],
