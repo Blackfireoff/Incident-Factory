@@ -182,3 +182,54 @@ class BedrockService:
             temperature=0.1, 
             max_tokens=2048
         )
+
+    def generate_chart_analysis(self, user_query: str, sql_data_json: str, columns: List[str]) -> Dict[str, Any]:
+        """
+        Analyse les données SQL et la requête pour suggérer un graphique.
+        Ne renvoie PAS l'index ou les catégories, car le frontend les déduira.
+        """
+        
+        system_prompt = f"""
+        Tu es un analyste de données expert. L'utilisateur t'a posé une question et tu as les données SQL suivantes en format JSON pour y répondre.
+        Ta tâche est de renvoyer un objet JSON (et RIEN D'AUTRE) qui analyse ces données.
+
+        --- RÈGLES DE LOGIQUE ---
+        1.  **Si les données sont `[]` (liste vide) :**
+            - `chart_type` DOIT être "list".
+            - `title` DOIT être un titre approprié (ex: "Aucun Résultat").
+            - `insight` DOIT expliquer qu'aucune donnée n'a été trouvée (ex: "Aucune donnée disponible pour cette requête.").
+        
+        2.  **Si les données sont pleines :**
+            - Suggère "bar", "pie", ou "line" en fonction des colonnes : {columns}.
+            - Rédige un `title` et un `insight`.
+
+        Format de sortie OBLIGATOIRE (JSON uniquement) :
+        {{
+          "chart_type": "bar" | "pie" | "line" | "list",
+          "title": "Titre du graphique",
+          "insight": "Une brève analyse de ce que les données montrent."
+        }}
+        
+        --- DONNÉES SQL (JSON) ---
+        {sql_data_json}
+        --- FIN DES DONNÉES ---
+        """
+        
+        response_text = self._call_bedrock(
+            system_prompt=system_prompt, 
+            user_content=user_query, 
+            temperature=0.0, 
+            max_tokens=1024
+        )
+        
+        try:
+            # Nettoyer la réponse pour extraire le JSON
+            json_match = re.search(r"\{.*\}", response_text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group(0))
+            else:
+                # Fallback
+                return {"chart_type": "list", "title": "Données Brutes", "insight": "L'analyse IA a échoué."}
+        except Exception as e:
+            print(f"Erreur de parsing JSON pour l'analyse de graphique: {e}")
+            return {"chart_type": "list", "title": "Erreur d'Analyse", "insight": str(e)}

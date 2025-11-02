@@ -8,13 +8,49 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 
+// --- IMPORTS POUR LES GRAPHIQUES ---
+import {
+    BarChart,
+    Bar,
+    PieChart,
+    Pie,
+    Cell,
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+    ResponsiveContainer,
+} from "recharts"
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 type ChatMode = "query" | "graphic" | "summary"
 
+// --- INTERFACES POUR LES DONNÉES DE GRAPHIQUE (SIMPLIFIÉES) ---
+interface ChartAnalysis {
+    chart_type: "bar" | "pie" | "line" | "list"
+    title: string
+    insight: string
+    // 'index' et 'categories' sont retirés, ils viendront des données brutes
+}
+interface ChartData {
+    columns: string[]
+    rows: Record<string, any>[]
+}
+interface ChartResponse {
+    analysis: ChartAnalysis
+    data: ChartData
+}
+type MessageContent = string | { type: "chart"; payload: ChartResponse }
+
+const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8", "#FF0000"]
+
 export function Chatbot() {
     const [isOpen, setIsOpen] = useState(false)
-    const [messages, setMessages] = useState<{ role: "user" | "bot"; content: string }[]>([
-        { role: "bot", content: "Hello! I'm here to help you with incident reporting. How can I assist you today?" },
+    const [messages, setMessages] = useState<{ role: "user" | "bot"; content: MessageContent }[]>([
+        { role: "bot", content: "Bonjour! Je suis prêt à analyser vos données. Posez-moi une question." },
     ])
     const [input, setInput] = useState("")
     const [mode, setMode] = useState<ChatMode>("query")
@@ -26,58 +62,81 @@ export function Chatbot() {
         const userMessage = input.trim()
         setMessages((prev) => [...prev, { role: "user", content: userMessage }])
         setInput("")
-
-        if (mode !== "query") {
-            const upcomingFeatureMessage =
-                mode === "graphic"
-                    ? "La génération de graphiques sera disponible prochainement."
-                    : "La synthèse automatique sera disponible prochainement."
-            setMessages((prev) => [...prev, { role: "bot", content: upcomingFeatureMessage }])
-            return
-        }
-
         setIsLoading(true)
+
         try {
-            const response = await fetch(`${API_BASE_URL}/ai/query`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    accept: "application/json",
-                },
-                body: JSON.stringify({ query: userMessage }),
-            })
-
-            let answerText = "Je n'ai pas pu obtenir de réponse pour le moment."
-            let payload: unknown
-
-            try {
-                payload = await response.json()
-            } catch (parseError) {
-                console.error("Failed to parse chatbot response:", parseError)
+            if (mode === "query") {
+                await handleQueryMode(userMessage)
+            } else if (mode === "graphic") {
+                await handleGraphicMode(userMessage)
+            } else {
+                setMessages((prev) => [...prev, { role: "bot", content: "La fonction de synthèse sera bientôt disponible." }])
             }
-
-            const body = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null
-
-            if (body && typeof body.response === "string") {
-                answerText = body.response
-            } else if (!response.ok && body && typeof body.message === "string") {
-                answerText = `Erreur API: ${body.message}`
-            } else if (!response.ok) {
-                answerText = `Erreur API: statut ${response.status}`
-            }
-
-            setMessages((prev) => [...prev, { role: "bot", content: answerText }])
         } catch (error) {
-            console.error("Error calling chatbot API:", error)
+            console.error("Error in handleSend:", error)
             setMessages((prev) => [
                 ...prev,
-                {
-                    role: "bot",
-                    content: "Une erreur est survenue lors de la communication avec l'API. Veuillez réessayer.",
-                },
+                { role: "bot", content: "Une erreur de communication est survenue. Veuillez réessayer." },
             ])
         } finally {
             setIsLoading(false)
+        }
+    }
+
+    const handleQueryMode = async (userMessage: string) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/ai/query`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", accept: "application/json" },
+                body: JSON.stringify({ query: userMessage }),
+            })
+            const body = (await response.json()) as Record<string, unknown>
+            let answerText = "Je n'ai pas pu obtenir de réponse."
+
+            if (body && typeof body.response === "string") {
+                answerText = body.response
+            } else if (!response.ok) {
+                answerText = `Erreur API: statut ${response.status}`
+            }
+            setMessages((prev) => [...prev, { role: "bot", content: answerText }])
+        } catch (error) {
+            console.error("Error calling /ai/query:", error)
+            throw error 
+        } finally {
+            setIsLoading(false) 
+        }
+    }
+
+    const handleGraphicMode = async (userMessage: string) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/ai/chart`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", accept: "application/json" },
+                body: JSON.stringify({ query: userMessage }),
+            })
+            
+            if (!response.ok) {
+                setMessages((prev) => [...prev, { role: "bot", content: `Erreur API: statut ${response.status}` }])
+                return
+            }
+
+            const body = (await response.json()) as { analysis: ChartAnalysis; data: ChartData; type: string, query: string }
+
+            if (body.type === "chart" && body.analysis && body.data) {
+                setMessages((prev) => [
+                    ...prev,
+                    { role: "bot", content: { type: "chart", payload: { analysis: body.analysis, data: body.data } } },
+                ])
+            } else if (body.type === "error" && body.analysis?.insight) {
+                setMessages((prev) => [...prev, { role: "bot", content: `Erreur de graphique : ${body.analysis.insight}` }])
+            } else {
+                setMessages((prev) => [...prev, { role: "bot", content: "La réponse du graphique était dans un format inattendu." }])
+            }
+        } catch (error) {
+            console.error("Error calling /ai/chart:", error)
+            throw error 
+        } finally {
+            setIsLoading(false) 
         }
     }
 
@@ -96,12 +155,12 @@ export function Chatbot() {
 
             <Card
                 className={cn(
-                    "fixed bottom-6 right-6 w-96 shadow-2xl transition-all z-50 !p-0", // 🔥 supprime le padding global du Card
+                    "fixed bottom-6 right-6 w-[450px] shadow-2xl transition-all z-50 !p-0", // Largeur augmentée
                     "overflow-hidden rounded-lg gap-0",
                     isOpen ? "scale-100 opacity-100" : "scale-0 opacity-0",
                 )}
             >
-                {/* Header sans aucun espace en haut */}
+                {/* Header inchangé */}
                 <CardHeader className="p-0 gap-0">
                     <div className="flex flex-row items-center justify-between px-4 py-3 bg-primary text-primary-foreground m-0">
                         <CardTitle className="text-lg font-semibold">Support Assistant</CardTitle>
@@ -117,8 +176,9 @@ export function Chatbot() {
                 </CardHeader>
 
                 <CardContent className="p-4">
+                    {/* Selecteur de mode inchangé */}
                     <div className="mb-3 flex items-center justify-between gap-3 text-sm text-muted-foreground">
-                        <span className="font-medium text-foreground">Type de requête</span>
+                         <span className="font-medium text-foreground">Type de requête</span>
                         <Select value={mode} onValueChange={(value) => setMode(value as ChatMode)}>
                             <SelectTrigger className="w-40">
                                 <SelectValue placeholder="Choisissez un mode" />
@@ -131,16 +191,25 @@ export function Chatbot() {
                         </Select>
                     </div>
 
+                    {/* --- LOGIQUE DE RENDU MISE À JOUR --- */}
                     <div className="h-80 overflow-y-auto mb-4 space-y-3">
                         {messages.map((message, index) => (
                             <div key={index} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
                                 <div
                                     className={cn(
-                                        "max-w-[80%] rounded-lg px-4 py-2 text-sm whitespace-pre-line",
+                                        "max-w-[95%] rounded-lg px-4 py-2 text-sm", // Max-width augmentée
                                         message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
                                     )}
                                 >
-                                    {message.content}
+                                    {/* --- LOGIQUE DE RENDU : TEXTE OU GRAPHIQUE --- */}
+                                    {typeof message.content === "string" ? (
+                                        <div className="whitespace-pre-line">{message.content}</div>
+                                    ) : (
+                                        <BotChartMessage 
+                                            analysis={message.content.payload.analysis} 
+                                            data={message.content.payload.data}
+                                        />
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -157,6 +226,7 @@ export function Chatbot() {
                         )}
                     </div>
 
+                    {/* Input inchangé */}
                     <div className="flex gap-2">
                         <Input
                             value={input}
@@ -179,4 +249,161 @@ export function Chatbot() {
             </Card>
         </>
     )
+}
+
+// --- COMPOSANT DE RENDU GRAPHIQUE (CORRIGÉ) ---
+function BotChartMessage({ analysis, data }: { analysis: ChartAnalysis; data: ChartData }) {
+    
+    const valueFormatter = (value: any) => (typeof value === 'number' ? value.toLocaleString("fr") : value);
+
+    // --- CORRECTION DÉFENSIVE (Solution au crash) ---
+    // On déduit les clés des colonnes de données, PAS de l'analyse de l'IA.
+    // L'IA est mauvaise à ce jeu, mais les données SQL sont fiables.
+    const indexKey = (data.columns && data.columns.length > 0) ? data.columns[0] : "index";
+    const categoryKeys = (data.columns && data.columns.length > 1) ? data.columns.slice(1) : [];
+    
+    // Si les données sont vides ou que l'IA a dit 'list', on ne dessine pas de graphique.
+    const chartType = (analysis.chart_type === 'list' || !data.rows || data.rows.length === 0) 
+        ? "list" 
+        : analysis.chart_type;
+    // --- FIN DE LA CORRECTION ---
+
+
+    const renderChart = () => {
+        const chartHeight = 250
+
+        switch (chartType) { // Utilise la variable sécurisée 'chartType'
+            case "bar":
+                return (
+                    <ResponsiveContainer width="100%" height={chartHeight}>
+                        <BarChart data={data.rows} margin={{ top: 5, right: 0, left: -20, bottom: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                            <XAxis 
+                                dataKey={indexKey} // Clé sécurisée
+                                angle={-10} 
+                                textAnchor="end" 
+                                height={60} 
+                                interval={0} 
+                                fontSize={10} 
+                                tick={{ fill: 'hsl(var(--foreground))' }} 
+                            />
+                            <YAxis fontSize={10} tick={{ fill: 'hsl(var(--foreground))' }} />
+                            <Tooltip formatter={valueFormatter} wrapperClassName="text-xs !bg-popover !border-border" />
+                            <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
+                            {categoryKeys.map((category, i) => ( // Tableau sécurisé
+                                <Bar key={category} dataKey={category} name={category} fill={COLORS[i % COLORS.length]} />
+                            ))}
+                        </BarChart>
+                    </ResponsiveContainer>
+                )
+            
+            case "pie":
+                return (
+                    <ResponsiveContainer width="100%" height={chartHeight}>
+                        <PieChart>
+                            <Pie
+                                data={data.rows}
+                                dataKey={categoryKeys[0]} // Clé de catégorie sécurisée
+                                nameKey={indexKey} // Clé d'index sécurisée
+                                cx="50%"
+                                cy="50%"
+                                innerRadius="50%"
+                                outerRadius="70%"
+                                paddingAngle={2}
+                            >
+                                {data.rows.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                            </Pie>
+                            <Tooltip formatter={valueFormatter} wrapperClassName="text-xs !bg-popover !border-border" />
+                            <Legend wrapperStyle={{ fontSize: "12px" }} />
+                        </PieChart>
+                    </ResponsiveContainer>
+                )
+            
+            case "line":
+                 return (
+                    <ResponsiveContainer width="100%" height={chartHeight}>
+                        <LineChart data={data.rows} margin={{ top: 5, right: 10, left: -20, bottom: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                            <XAxis 
+                                dataKey={indexKey} // Clé sécurisée
+                                fontSize={10} 
+                                tick={{ fill: 'hsl(var(--foreground))' }} 
+                                angle={-10} 
+                                textAnchor="end" 
+                                height={60}
+                            />
+                            <YAxis fontSize={10} tick={{ fill: 'hsl(var(--foreground))' }} />
+                            <Tooltip formatter={valueFormatter} wrapperClassName="text-xs !bg-popover !border-border" />
+                            <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
+                            {categoryKeys.map((category, i) => ( // Tableau sécurisé
+                                <Line key={category} type="monotone" dataKey={category} name={category} stroke={COLORS[i % COLORS.length]} />
+                            ))}
+                        </LineChart>
+                    </ResponsiveContainer>
+                )
+            
+            default: // "list"
+                // Ne rien afficher si le type est 'list' (données vides)
+                return null;
+        }
+    }
+
+    return (
+        <div className="p-1 w-full text-foreground"> 
+            <h4 className="font-semibold">{analysis.title || "Résultats"}</h4>
+            <p className="text-xs text-muted-foreground mb-2">{analysis.insight || "Voici les données extraites."}</p>
+            {renderChart()}
+        </div>
+    )
+}
+
+// Ajout des styles pour les typing dots
+// (Le reste du code, y compris l'ajout du 'style', est inchangé)
+const style = document.createElement('style');
+style.innerHTML = `
+    .typing-dot {
+        width: 6px;
+        height: 6px;
+        background-color: hsl(var(--muted-foreground));
+        border-radius: 50%;
+        display: inline-block;
+        animation: typing 1s infinite;
+    }
+    .typing-dot:nth-child(2) {
+        animation-delay: 0.15s;
+    }
+    .typing-dot:nth-child(3) {
+        animation-delay: 0.3s;
+    }
+    @keyframes typing {
+        0%, 80%, 100% {
+            transform: scale(0);
+        }
+        40% {
+            transform: scale(1.0);
+        }
+    }
+    .bg-background-inset {
+        background-color: #f1f5f9; /* Valeur par défaut pour light mode */
+    }
+    .text-foreground-inset {
+        color: #020817; /* Valeur par défaut pour light mode */
+    }
+    html.dark .bg-background-inset {
+        background-color: #020817; /* Mode dark */
+    }
+    html.dark .text-foreground-inset {
+        color: #f8fafc; /* Mode dark */
+    }
+    /* Gère la couleur de remplissage des ticks recharts */
+    .recharts-cartesian-axis-tick-value {
+        fill: hsl(var(--foreground)) !important;
+    }
+`;
+// S'assurer que le style n'est ajouté qu'une seule fois
+if (!document.getElementById('chatbot-styles')) {
+    style.id = 'chatbot-styles';
+    document.head.appendChild(style);
 }

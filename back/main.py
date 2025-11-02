@@ -13,6 +13,7 @@ import re
 import unicodedata
 from fastapi.middleware.cors import CORSMiddleware
 from ai_router import router as ai_api_router
+from chart_router import router as chart_api_router 
 
 origins = [
     "*"
@@ -34,6 +35,7 @@ app.add_middleware(
 )
 
 app.include_router(ai_api_router)
+app.include_router(chart_api_router) 
 
 # Fonction pour convertir les datetime, date et Decimal en types JSON-serialisables
 def convert_datetime_to_str(obj):
