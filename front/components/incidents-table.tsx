@@ -66,7 +66,7 @@ const formatDateForApi = (value?: Date) => (value ? format(value, "yyyy-MM-dd") 
 
 
 // ==================================================================
-// --- COMPOSANT ADVANCEDFILTERS (Intégré) ---
+// --- COMPOSANT ADVANCEDFILTERS (Intégré et MODIFIÉ) ---
 // ==================================================================
 interface AdvancedFiltersProps {
     filters: Filters
@@ -108,6 +108,15 @@ export function AdvancedFilters({ filters, onFilterChange, onApplyFilters, isApp
         })
     }
 
+    // --- NOUVEAU HELPER : Gestion de la touche Entrée ---
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' && onApplyFilters) {
+            e.preventDefault() // Empêche la soumission du formulaire par défaut si l'input est dans un form
+            onApplyFilters()
+        }
+    }
+    // --- FIN NOUVEAU HELPER ---
+
     const currentYear = new Date().getFullYear()
     const years = Array.from({ length: 10 }, (_, i) => (currentYear - i).toString())
 
@@ -130,6 +139,9 @@ export function AdvancedFilters({ filters, onFilterChange, onApplyFilters, isApp
                         placeholder="Enter event ID..."
                         value={filters.eventId}
                         onChange={(e) => onFilterChange({ ...filters, eventId: e.target.value })}
+                        // --- MODIFICATION ICI ---
+                        onKeyDown={handleKeyDown}
+                        // --- FIN MODIFICATION ---
                     />
                 </div>
 
@@ -141,6 +153,9 @@ export function AdvancedFilters({ filters, onFilterChange, onApplyFilters, isApp
                         placeholder="Enter matricule..."
                         value={filters.employeeMatricule}
                         onChange={(e) => onFilterChange({ ...filters, employeeMatricule: e.target.value })}
+                        // --- MODIFICATION ICI ---
+                        onKeyDown={handleKeyDown}
+                        // --- FIN MODIFICATION ---
                     />
                 </div>
 
@@ -294,10 +309,10 @@ export function IncidentsTable() {
                     if (employeeMatricule) {
                         params.set("employee_matricule", employeeMatricule)
                     }
-                    if (type) {
+                    if (type && type.trim() !== "") {
                         params.set("type", type)
                     }
-                    if (classification) {
+                    if (classification && classification.trim() !== "") {
                         params.set("classification", classification)
                     }
                     const formattedStart = formatDateForApi(startDate)
@@ -450,7 +465,7 @@ export function IncidentsTable() {
         <Card>
             <CardHeader>
                 <CardTitle>All Incident Reports</CardTitle>
-                <CardDescription>View and manage all incident reports from the facility</CardDescription>
+                <CardDescription>View all incident reports from the facility</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="mb-6 space-y-4">
@@ -581,4 +596,3 @@ export function IncidentsTable() {
         </Card>
     )
 }
-
