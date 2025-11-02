@@ -780,8 +780,17 @@ async def get_tables():
         )
 
 @app.get("/get_events")
-async def get_events(offset: int = 0):
-    """Route pour récupérer les 20 premières lignes de la table event avec pagination"""
+async def get_events(
+    offset: int = 0,
+    limit: int = Query(20, ge=1, le=200),
+    event_id: Optional[int] = Query(None),
+    employee_matricule: Optional[str] = Query(None),
+    event_type: Optional[str] = Query(None, alias="type"),
+    classification: Optional[str] = Query(None),
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+):
+    """Route pour récupérer les événements avec pagination et filtres optionnels"""
     try:
         # Validation: offset doit être >= 0
         if offset < 0:
@@ -792,9 +801,63 @@ async def get_events(offset: int = 0):
                     "message": "Offset must be a non-negative integer"
                 }
             )
+
+        if start_date and end_date and end_date < start_date:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "message": "end_date must be greater than or equal to start_date"
+                }
+            )
+
+        sanitized_employee = employee_matricule.strip() if employee_matricule else None
+        sanitized_type = event_type.strip() if event_type else None
+        sanitized_classification = classification.strip() if classification else None
+
+        filters_sql: list[str] = []
+        filter_params: list = []
+
+        if event_id is not None:
+            filters_sql.append("e.event_id = %s")
+            filter_params.append(event_id)
+
+        if sanitized_employee:
+            filters_sql.append("p.matricule ILIKE %s")
+            filter_params.append(f"%{sanitized_employee}%")
+
+        if sanitized_type:
+            filters_sql.append("e.type = %s")
+            filter_params.append(sanitized_type)
+
+        if sanitized_classification:
+            filters_sql.append("e.classification = %s")
+            filter_params.append(sanitized_classification)
+
+        if start_date:
+            filters_sql.append("DATE(e.start_datetime) >= %s")
+            filter_params.append(start_date)
+
+        if end_date:
+            filters_sql.append("DATE(e.start_datetime) <= %s")
+            filter_params.append(end_date)
+
+        where_clause = ""
+        if filters_sql:
+            where_clause = "WHERE " + " AND ".join(filters_sql)
+
+        count_query = f"""
+            SELECT COUNT(*) as total_event
+            FROM event e
+            LEFT JOIN person p ON e.declared_by_id = p.person_id
+            {where_clause};
+        """
+        count_params = tuple(filter_params)
+        total_count_rows = query_db(count_query, params=count_params if count_params else None)
+        total_count_value = total_count_rows[0]["total_event"] if total_count_rows else 0
         
-        # Récupérer les 20 premières lignes avec tous les champs nécessaires pour l'interface Incident
-        events = query_db("""
+        # Récupérer les lignes avec tous les champs nécessaires pour l'interface Incident
+        events_query = f"""
             SELECT 
                 e.event_id,
                 e.description,
@@ -809,13 +872,12 @@ async def get_events(offset: int = 0):
                 p.role
             FROM event e
             LEFT JOIN person p ON e.declared_by_id = p.person_id
+            {where_clause}
             ORDER BY e.event_id
-            LIMIT 20 OFFSET %s;
-        """, params=(offset,))
-
-        total_count = query_db("""
-        SELECT COUNT(*) as Total_event FROM event;
-        """)
+            LIMIT %s OFFSET %s;
+        """
+        events_params = tuple(filter_params + [limit, offset])
+        events = query_db(events_query, params=events_params)
         
         # Transformer les résultats pour correspondre à l'interface Incident simplifiée
         events_payload: list[dict] = []
@@ -849,7 +911,7 @@ async def get_events(offset: int = 0):
             {
                 "status": "success",
                 "offset": offset,
-                "total_count": total_count[0]["total_event"],
+                "total_count": total_count_value,
                 "count": len(events_serializable),
                 "events": events_serializable,
             }

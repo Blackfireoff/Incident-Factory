@@ -27,9 +27,11 @@ interface Filters {
 interface AdvancedFiltersProps {
   filters: Filters
   onFilterChange: (filters: Filters) => void
+  onApplyFilters?: () => void
+  isApplying?: boolean
 }
 
-export function AdvancedFilters({ filters, onFilterChange }: AdvancedFiltersProps) {
+export function AdvancedFilters({ filters, onFilterChange, onApplyFilters, isApplying = false }: AdvancedFiltersProps) {
   const [types, setTypes] = useState<string[]>([])
   const [classifications, setClassifications] = useState<string[]>([])
 
@@ -177,6 +179,14 @@ export function AdvancedFilters({ filters, onFilterChange }: AdvancedFiltersProp
         </div>
 
       </div>
+
+      {onApplyFilters && (
+        <div className="flex justify-end">
+          <Button type="button" onClick={onApplyFilters} disabled={isApplying}>
+            Filtrer
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

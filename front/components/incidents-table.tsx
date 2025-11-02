@@ -43,11 +43,36 @@ interface ApiEvent {
     id: number
     type: string | null
     classification: string | null
-    start_date: string | null
-    end_date: string | null
+    start_datetime: string | null
+    end_datetime: string | null
     description: string | null
     reporter: ApiReporter | null
 }
+
+const createInitialFilters = (): Filters => ({
+    eventId: "",
+    employeeMatricule: "",
+    type: "",
+    classification: "",
+    startDate: undefined,
+    endDate: undefined,
+    startMonth: undefined,
+    endMonth: undefined,
+    startYear: "",
+    endYear: "",
+})
+
+const normalizeFilters = (raw: Filters): Filters => ({
+    ...raw,
+    eventId: raw.eventId.trim(),
+    employeeMatricule: raw.employeeMatricule.trim(),
+    type: raw.type.trim(),
+    classification: raw.classification.trim(),
+    startYear: raw.startYear.trim(),
+    endYear: raw.endYear.trim(),
+})
+
+const formatDateForApi = (value?: Date) => (value ? format(value, "yyyy-MM-dd") : undefined)
 
 export function IncidentsTable() {
     const [incidents, setIncidents] = useState<Incident[]>([])
@@ -57,25 +82,15 @@ export function IncidentsTable() {
     const [searchTerm, setSearchTerm] = useState("")
     const [currentPage, setCurrentPage] = useState(1)
     const [showFilters, setShowFilters] = useState(false)
-    const [filters, setFilters] = useState<Filters>({
-        eventId: "",
-        employeeMatricule: "",
-        type: "",
-        classification: "",
-        startDate: undefined,
-        endDate: undefined,
-        startMonth: undefined,
-        endMonth: undefined,
-        startYear: "",
-        endYear: "",
-    })
+    const [filters, setFilters] = useState<Filters>(() => createInitialFilters())
+    const [appliedFilters, setAppliedFilters] = useState<Filters>(() => createInitialFilters())
     const router = useRouter()
 
     useEffect(() => {
         let ignore = false
         const controller = new AbortController()
 
-        async function fetchAllIncidents() {
+        const fetchAllIncidents = async () => {
             setLoading(true)
             setError(null)
 
@@ -87,8 +102,48 @@ export function IncidentsTable() {
                 let iteration = 0
                 let totalCountFromApi: number | null = null
 
+                const buildQueryParams = (offsetValue: number) => {
+                    const params = new URLSearchParams()
+                    params.set("offset", offsetValue.toString())
+                    params.set("limit", ITEMS_PER_PAGE.toString())
+
+                    const { eventId, employeeMatricule, type, classification, startDate, endDate } = appliedFilters
+
+                    if (eventId) {
+                        const parsedEventId = Number.parseInt(eventId, 10)
+                        if (!Number.isNaN(parsedEventId)) {
+                            params.set("event_id", parsedEventId.toString())
+                        }
+                    }
+
+                    if (employeeMatricule) {
+                        params.set("employee_matricule", employeeMatricule)
+                    }
+
+                    if (type) {
+                        params.set("type", type)
+                    }
+
+                    if (classification) {
+                        params.set("classification", classification)
+                    }
+
+                    const formattedStart = formatDateForApi(startDate)
+                    if (formattedStart) {
+                        params.set("start_date", formattedStart)
+                    }
+
+                    const formattedEnd = formatDateForApi(endDate)
+                    if (formattedEnd) {
+                        params.set("end_date", formattedEnd)
+                    }
+
+                    return params
+                }
+
                 while (hasMore && !ignore) {
-                    const response = await fetch(`${API_BASE_URL}/get_events?offset=${offset}`, {
+                    const params = buildQueryParams(offset)
+                    const response = await fetch(`${API_BASE_URL}/get_events?${params.toString()}`, {
                         headers: { accept: "application/json" },
                         cache: "no-store",
                         signal: controller.signal,
@@ -130,8 +185,8 @@ export function IncidentsTable() {
                                 id: event.id,
                                 type: asType(event.type),
                                 classification: asClassification(event.classification),
-                                start_datetime: event.start_date ? new Date(event.start_date) : null,
-                                end_date: event.end_date ? new Date(event.end_date) : null,
+                                start_datetime: event.start_datetime ? new Date(event.start_datetime) : null,
+                                end_date: event.end_datetime ? new Date(event.end_datetime) : null,
                                 description: event.description ?? null,
                                 person: event.reporter
                                     ? {
@@ -181,7 +236,7 @@ export function IncidentsTable() {
             ignore = true
             controller.abort()
         }
-    }, [])
+    }, [appliedFilters])
 
     const filteredIncidents = useMemo(() => {
         let dataset = incidents
@@ -210,11 +265,11 @@ export function IncidentsTable() {
 
         // Placeholder for future filter logic
         return dataset
-    }, [incidents, searchTerm, filters])
+    }, [incidents, searchTerm])
 
     const filteredCount = filteredIncidents.length
     const hasSearch = searchTerm.trim().length > 0
-    const hasAdvancedFilters = Object.entries(filters).some(([key, value]) => {
+    const hasAdvancedFilters = Object.entries(appliedFilters).some(([key, value]) => {
         if (
             key === "startDate" ||
             key === "endDate" ||
@@ -252,6 +307,11 @@ export function IncidentsTable() {
         setCurrentPage(1)
     }
 
+    const handleApplyFilters = () => {
+        setCurrentPage(1)
+        setAppliedFilters(normalizeFilters(filters))
+    }
+
     return (
         <Card>
             <CardHeader>
@@ -265,19 +325,16 @@ export function IncidentsTable() {
                             <Filter className="h-4 w-4 mr-2" />
                             {showFilters ? "Hide Filters" : "Show Filters"}
                         </Button>
-                        <div className="relative w-full md:ml-auto md:max-w-sm">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                value={searchTerm}
-                                onChange={(event) => handleSearch(event.target.value)}
-                                placeholder="Search by reporter, type, classification or description"
-                                className="pl-9"
-                                aria-label="Search incidents"
-                            />
-                        </div>
                     </div>
 
-                    {showFilters && <AdvancedFilters filters={filters} onFilterChange={handleFilterChange} />}
+                    {showFilters && (
+                        <AdvancedFilters
+                            filters={filters}
+                            onFilterChange={handleFilterChange}
+                            onApplyFilters={handleApplyFilters}
+                            isApplying={loading}
+                        />
+                    )}
                 </div>
 
                 {loading ? (
