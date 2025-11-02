@@ -8,7 +8,7 @@ import { ArrowLeft, Calendar, MapPin, User, Shield, Wrench, DollarSign, Briefcas
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { CorrectiveMeasure, Incident, LinkedEmployee, Risk } from "@/lib/data/incidents-data"
-import { getTypeColor } from "@/lib/utils"
+import { getClassificationString, getTypeColor, getTypeString } from "@/lib/utils"
 
 interface IncidentDetailProps {
     incident: Incident
@@ -62,16 +62,16 @@ export function IncidentDetail({ incident, linkedEmployees, risks, correctiveMea
                 <div className="mb-8">
                     <div className="flex items-start justify-between mb-4">
                         <div>
-                            <h1 className="text-4xl font-bold text-foreground mb-2 text-balance">
+                            <h1 className="text-4xl font-bold text-foreground mb-3 text-balance">
                                 Report #{incident.id}
                             </h1>
-                            <Badge variant="secondary" className="bg-primary/10 text-primary">
-                                {incident.classification}
+                            <Badge variant="secondary" className="bg-primary/10 text-primary text-md">
+                                {getClassificationString(incident.classification)}
                             </Badge>
                         </div>
                         {incident.type &&
                         <Badge variant="outline" className={`${getTypeColor(incident.type)} text-lg px-4 py-2`}>
-                            {incident.type}
+                            {getTypeString(incident.type)}
                         </Badge>}
                     </div>
                 </div>
@@ -102,7 +102,7 @@ export function IncidentDetail({ incident, linkedEmployees, risks, correctiveMea
                                 <div>
                                     <div className="text-sm font-medium text-muted-foreground mb-1">End Date</div>
                                     <div className="font-medium">
-                                        {incident.end_date ? format(incident.end_date, "MMMM dd, yyyy 'at' HH:mm") : "Ongoing"}
+                                        {incident.end_datetime ? format(incident.end_datetime, "MMMM dd, yyyy 'at' HH:mm") : "Ongoing"}
                                     </div>
                                 </div>
                             </div>

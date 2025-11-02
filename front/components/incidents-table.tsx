@@ -186,7 +186,7 @@ export function IncidentsTable() {
                                 type: asType(event.type),
                                 classification: asClassification(event.classification),
                                 start_datetime: event.start_datetime ? new Date(event.start_datetime) : null,
-                                end_date: event.end_datetime ? new Date(event.end_datetime) : null,
+                                end_datetime: event.end_datetime ? new Date(event.end_datetime) : null,
                                 description: event.description ?? null,
                                 person: event.reporter
                                     ? {
@@ -396,7 +396,7 @@ export function IncidentsTable() {
 
                                             {/* Corrigé: 'end_date' est déjà une Date */}
                                             <TableCell>
-                                                {incident.end_date ? format(incident.end_date, "MMM dd, yyyy HH:mm") : "—"}
+                                                {incident.end_datetime ? format(incident.end_datetime, "MMM dd, yyyy HH:mm") : "—"}
                                             </TableCell>
                                         </TableRow>
                                     ))}

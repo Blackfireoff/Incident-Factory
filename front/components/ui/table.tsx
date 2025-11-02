@@ -52,7 +52,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<'tfoot'>) {
   )
 }
 
-function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
+function TableRow({ className, children, ...props }: React.ComponentProps<'tr'>) {
   return (
     <tr
       data-slot="table-row"
@@ -61,7 +61,9 @@ function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
         className,
       )}
       {...props}
-    />
+    >
+      {React.Children.map(children, (child) => child)}
+    </tr>
   )
 }
 

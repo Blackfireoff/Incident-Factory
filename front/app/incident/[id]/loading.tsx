@@ -6,7 +6,7 @@ import Link from "next/link"
 export default function IncidentLoading() {
   return (
     <main className="min-h-screen bg-background">
-      <div className="container mx-auto py-8 px-4 max-w-6xl">
+      <div className="container mx-auto py-8 px-4">
         <Link
           href="/reports"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"

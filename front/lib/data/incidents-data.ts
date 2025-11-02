@@ -3,7 +3,7 @@ export interface Incident {
     type: TypeEvent | null
     classification: ClassificationEvent | null
     start_datetime: Date | null
-    end_date: Date | null
+    end_datetime: Date | null
     description: string | null
     person : Person | null
     employees: LinkedEmployee[] | null
@@ -107,7 +107,7 @@ export const incidents: Incident[] = [
         type: TypeEvent.DAMAGE, // "Equipment Failure"
         classification: ClassificationEvent.INJURY,
         start_datetime: new Date("2024-01-15T08:30:00Z"),
-        end_date: new Date("2024-01-15T12:00:00Z"),
+        end_datetime: new Date("2024-01-15T12:00:00Z"),
         description: "Injection molding machine malfunction causing production halt",
         person: personJohnSmith,
         organizational_unit: { ...unitProd, location: "Production Line A - Station 3" },
@@ -166,7 +166,7 @@ export const incidents: Incident[] = [
         type: TypeEvent.EHS, // "Safety Incident"
         classification: ClassificationEvent.FIRST_AID,
         start_datetime: new Date("2024-01-20T14:15:00Z"),
-        end_date: new Date("2024-01-20T14:45:00Z"),
+        end_datetime: new Date("2024-01-20T14:45:00Z"),
         description: "Worker exposed to chemical fumes due to ventilation system failure",
         person: personSarahJohnson,
         organizational_unit: { ...unitSafety, location: "Chemical Storage Area B" },
@@ -240,7 +240,7 @@ export const incidents: Incident[] = [
         type: TypeEvent.DAMAGE, // "Quality Issue"
         classification: ClassificationEvent.NEAR_MISS,
         start_datetime: new Date("2024-01-25T10:00:00Z"),
-        end_date: new Date("2024-01-25T11:30:00Z"),
+        end_datetime: new Date("2024-01-25T11:30:00Z"),
         description: "Batch of plastic containers failed quality inspection due to improper cooling",
         person: personMichaelChen,
         organizational_unit: { ...unitQuality, location: "Quality Control Lab" },
@@ -295,7 +295,7 @@ export const incidents: Incident[] = [
         type: TypeEvent.ENVIRONMENT, // "Environmental"
         classification: ClassificationEvent.INJURY,
         start_datetime: new Date("2024-02-01T16:00:00Z"),
-        end_date: new Date("2024-02-01T18:30:00Z"),
+        end_datetime: new Date("2024-02-01T18:30:00Z"),
         description: "Plastic pellet spill in loading dock area",
         person: personEmilyRodriguez,
         organizational_unit: { ...unitLogistics, location: "Loading Dock 2" },
