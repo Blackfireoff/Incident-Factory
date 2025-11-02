@@ -115,9 +115,10 @@ class BedrockService:
             -   *Correct:* `WHERE classification = 'INJURY'`
             -   *Correct:* `WHERE r.gravity = 'CRITICAL'`
         
-        11. **[NEW RULE] Total Cost:** The `corrective_measure` table stores repair measures. Each measure has a `cost`. The "total cost of repairs" for an incident is the `SUM(cm.cost)` of all linked `corrective_measure` entries.
+        11. **[UPDATED] Total Cost:** The `corrective_measure` table stores repair measures. Each measure has a `cost`. The "total cost of repairs" for an incident is the `SUM(cm.cost)`.
+            -   **IMPORTANT:** A `null` cost must be treated as `0`. When calculating a sum, you MUST use `COALESCE(SUM(cm.cost), 0)` to return `0` instead of `null` if no measures are found.
             - *Example Query:* "What is the total cost for incident 83?"
-            - *Correct SQL:* `SELECT SUM(cm.cost) FROM corrective_measure cm JOIN event_corrective_measure ecm ON cm.measure_id = ecm.measure_id WHERE ecm.event_id = 83`
+            - *Correct SQL:* `SELECT COALESCE(SUM(cm.cost), 0) AS total_cost FROM corrective_measure cm JOIN event_corrective_measure ecm ON cm.measure_id = ecm.measure_id WHERE ecm.event_id = 83`
         --- END OF RULES ---
 
         --- SCHEMA ---
@@ -182,11 +183,11 @@ class BedrockService:
         - *Example:* "The total cost is $0."
 
         **Rule 2.4 (Data Result - The Default Case):**
-        - If the context is ANY OTHER JSON (e.g., `[{"sum": 12700}]`, `[{"event_id": 426}, ...]`, `[{"avg": 26332}]`, etc.)
+        - If the context is ANY OTHER JSON (e.g., `[{"sum": 12700}]`, `[{"total_cost": 0}]`, `[{"event_id": 426}, ...]`, etc.)
         - *Action:* You MUST treat it as a success. Your only task is to synthesize this data into a clear sentence or bulleted list. DO NOT trigger an error.
         - *Example (Context: `[{"sum": 12700}]`) ->* "The total cost is $12,700."
-        - *Example (Context: `[{"event_id": 426}, {"event_id": 590}, ...]`) ->* "I found several incidents involving Alain Mercier, including incidents 426, 590, 615, and others."
-        - *Example (Context: `[{"description": "...", "count": 2}]`) ->* "Incident 80 had 2 corrective measures."
+        - *Example (Context: `[{"total_cost": 0}]`) ->* "The total cost is $0."
+        - *Example (Context: `[{"event_id": 426}, ...]`) ->* "I found several incidents involving Alain Mercier, including incidents 426, 590, 615, and others."
 
         --- END OF LOGIC ---
 
