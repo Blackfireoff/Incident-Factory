@@ -34,5 +34,39 @@ services:
         echo '✅ Restauration terminée' || (echo '❌ Échec restore' && exit 1)
       "
 
+
+  opensearch:
+    image: opensearchproject/opensearch:3
+    container_name: opensearch
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=FireTeams@2025!
+      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+
+  dashboards:
+    image: opensearchproject/opensearch-dashboards:3
+    container_name: dashboards
+    environment:
+      - OPENSEARCH_HOSTS=["https://opensearch:9200"]
+      - OPENSEARCH_USERNAME=admin
+      - OPENSEARCH_PASSWORD=FireTeams@2025!
+      - OPENSEARCH_SSL_VERIFICATIONMODE=none
+      - I18N_LOCALE=en
+    ports:
+      - "5601:5601"
+    depends_on:
+      - opensearch
+
+
 volumes:
   pgdata:
+  opensearch-data:
+
