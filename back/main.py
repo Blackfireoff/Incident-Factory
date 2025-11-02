@@ -14,10 +14,7 @@ import unicodedata
 from services.bedrock_service import MODEL_ID
 from fastapi.middleware.cors import CORSMiddleware
 
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+origins = ["*"]
 
 from search_engine import (
     get_opensearch_client,
@@ -979,7 +976,7 @@ async def get_basic_info():
         )
 
 @app.get("/get_most_recent_incidents")
-async def get_most_recent_incidents(limit: int = 5):
+async def get_most_recent_incidents(limit: int = 7):
     """Retourne les incidents les plus récents"""
     try:
         if limit <= 0:
@@ -1020,11 +1017,11 @@ async def get_most_recent_incidents(limit: int = 5):
                 "classification": event["classification"],
                 "start_datetime": event["start_datetime"],
                 "end_datetime": event["end_datetime"],
-                "reporter": None,
+                "person": None,
             }
 
             if event["person_id"]:
-                incident["reporter"] = {
+                incident["person"] = {
                     "id": event["person_id"],
                     "matricule": event["matricule"],
                     "name": event["name"],
