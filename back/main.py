@@ -12,6 +12,10 @@ from typing import List, Optional, Tuple
 import re
 import unicodedata
 from services.bedrock_service import MODEL_ID
+from services.analytics_service import (
+    generate_chart_from_question,
+    generate_summary_report,
+)
 
 
 from search_engine import (
@@ -472,6 +476,104 @@ def format_stats_answer(stats: List[Tuple[str, int]]) -> str:
 INDEX_NAME = "incidents"
 app = FastAPI(title="FireTeams API")
 chat_service = BedrockChatService()
+
+# --- Chart & summary generation endpoints ---
+
+@app.post("/ai/chart")
+async def ai_chart(request: Request):
+    """
+    Génère un graphique PNG encodé en base64 à partir d'une question analytique.
+    Body JSON attendu: { "question": "..."} ou { "message": "..." }
+    """
+    try:
+        data = await request.json()
+    except json.JSONDecodeError:
+        data = {}
+
+    question = (data or {}).get("question") or (data or {}).get("message")
+    if not question:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "message": "Provide 'question' (or 'message') in the JSON body",
+            },
+        )
+
+    try:
+        chart_result = generate_chart_from_question(question)
+        if not chart_result:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "status": "not_found",
+                    "question": question,
+                    "message": (
+                        "Aucun graphique généré pour cette question. "
+                        "Vérifiez que la requête cible des machines ou des mesures correctives."
+                    ),
+                },
+            )
+
+        chart = {
+            "title": chart_result.chart_data.title,
+            "x_label": chart_result.chart_data.x_label,
+            "y_label": chart_result.chart_data.y_label,
+            "categories": chart_result.chart_data.categories,
+            "values": chart_result.chart_data.values,
+            "caption": chart_result.chart_data.caption,
+            "image_base64": chart_result.image_base64,
+            "image_mime": chart_result.image_mime,
+        }
+
+        return JSONResponse(
+            {
+                "status": "success",
+                "question": question,
+                "chart": chart,
+            }
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Erreur lors de la génération du graphique: {str(exc)}",
+            },
+        )
+
+
+@app.post("/ai/summary")
+async def ai_summary(request: Request):
+    """
+    Génère un rapport synthétique au format Markdown.
+    """
+    try:
+        await request.json()
+    except json.JSONDecodeError:
+        pass
+    except Exception:
+        pass
+
+    try:
+        report = generate_summary_report()
+        return JSONResponse(
+            {
+                "status": "success",
+                "format": "markdown",
+                "suggested_filename": "synthese_incidents.txt",
+                "report": report,
+            }
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Erreur lors de la génération du rapport: {str(exc)}",
+            },
+        )
+
 
 # Fonction pour convertir les datetime, date et Decimal en types JSON-serialisables
 def convert_datetime_to_str(obj):
