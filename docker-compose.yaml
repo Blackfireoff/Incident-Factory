@@ -12,7 +12,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./events.backup:/backup/events.backup:ro
+      - ./events-bis.backup:/backup/events-bis.backup:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -h localhost -d ${POSTGRES_DB}"]
       interval: 5s
@@ -26,11 +26,11 @@ services:
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - ./events.backup:/backup/events.backup:ro
+      - ./events-bis.backup:/backup/events-bis.backup:ro
     entrypoint: >
       bash -c "
         echo '🚀 Restauration du backup...' &&
-        pg_restore -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} --verbose /backup/events.backup &&
+        pg_restore -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} --verbose /backup/events-bis.backup &&
         echo '✅ Restauration terminée' || (echo '❌ Échec restore' && exit 1)
       "
 
