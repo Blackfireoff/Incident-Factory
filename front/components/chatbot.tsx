@@ -26,14 +26,14 @@ import {
 } from "recharts"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
-type ChatMode = "query" | "graphic" | "summary"
+// --- CHATMODE MIS À JOUR ---
+type ChatMode = "query" | "graphic" | "report"
 
-// --- INTERFACES POUR LES DONNÉES DE GRAPHIQUE (SIMPLIFIÉES) ---
+// --- INTERFACES (INCHANGÉES) ---
 interface ChartAnalysis {
     chart_type: "bar" | "pie" | "line" | "list"
     title: string
     insight: string
-    // 'index' et 'categories' sont retirés, ils viendront des données brutes
 }
 interface ChartData {
     columns: string[]
@@ -56,6 +56,7 @@ export function Chatbot() {
     const [mode, setMode] = useState<ChatMode>("query")
     const [isLoading, setIsLoading] = useState(false)
 
+    // --- HANDLESEND MIS À JOUR ---
     const handleSend = async () => {
         if (!input.trim() || isLoading) return
 
@@ -69,8 +70,10 @@ export function Chatbot() {
                 await handleQueryMode(userMessage)
             } else if (mode === "graphic") {
                 await handleGraphicMode(userMessage)
+            } else if (mode === "report") {
+                await handleReportMode(userMessage) // <-- Nouvelle fonction
             } else {
-                setMessages((prev) => [...prev, { role: "bot", content: "La fonction de synthèse sera bientôt disponible." }])
+                setMessages((prev) => [...prev, { role: "bot", content: "Mode non reconnu." }])
             }
         } catch (error) {
             console.error("Error in handleSend:", error)
@@ -141,6 +144,50 @@ export function Chatbot() {
             setIsLoading(false) 
         }
     }
+    
+    // --- NOUVELLE FONCTION POUR GÉRER LE TÉLÉCHARGEMENT DE PDF ---
+    const handleReportMode = async (userMessage: string) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/ai/report`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", accept: "application/pdf" },
+                body: JSON.stringify({ query: userMessage }),
+            })
+
+            if (!response.ok) {
+                // Essayer de lire l'erreur JSON
+                try {
+                     const err = await response.json();
+                     setMessages((prev) => [...prev, { role: "bot", content: `Erreur de rapport: ${err.detail}` }])
+                } catch (e) {
+                     setMessages((prev) => [...prev, { role: "bot", content: `Erreur de rapport: statut ${response.status}` }])
+                }
+                return;
+            }
+
+            // Gérer le téléchargement du fichier
+            const blob = await response.blob()
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement("a")
+            a.href = url
+            a.download = "incident_report.pdf"
+            document.body.appendChild(a)
+            a.click()
+            
+            // Nettoyage
+            a.remove()
+            window.URL.revokeObjectURL(url)
+
+            setMessages((prev) => [...prev, { role: "bot", content: "Votre rapport 'incident_report.pdf' est prêt et le téléchargement a commencé." }])
+
+        } catch (error) {
+            console.error("Error calling /ai/report:", error)
+            throw error
+        } finally {
+            setIsLoading(false)
+        }
+    }
+    // --- FIN DE LA NOUVELLE FONCTION ---
 
     return (
         <>
@@ -178,7 +225,7 @@ export function Chatbot() {
                 </CardHeader>
 
                 <CardContent className="p-4">
-                    {/* Selecteur de mode inchangé */}
+                    {/* Selecteur de mode MIS À JOUR */}
                     <div className="mb-3 flex items-center justify-between gap-3 text-sm text-muted-foreground">
                          <span className="font-medium text-foreground">Type de requête</span>
                         <Select value={mode} onValueChange={(value) => setMode(value as ChatMode)}>
@@ -188,22 +235,21 @@ export function Chatbot() {
                             <SelectContent>
                                 <SelectItem value="query">Query</SelectItem>
                                 <SelectItem value="graphic">Graphic</SelectItem>
-                                <SelectItem value="summary">Summary</SelectItem>
+                                <SelectItem value="report">Report</SelectItem> {/* <-- NOUVELLE OPTION */}
                             </SelectContent>
                         </Select>
                     </div>
 
-                    {/* --- LOGIQUE DE RENDU MISE À JOUR --- */}
+                    {/* Logique de rendu (inchangée, gère déjà les nouveaux messages texte) */}
                     <div className="h-80 overflow-y-auto mb-4 space-y-3">
                         {messages.map((message, index) => (
                             <div key={index} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
                                 <div
                                     className={cn(
-                                        "max-w-[95%] rounded-lg px-4 py-2 text-sm", // Max-width augmentée
+                                        "max-w-[95%] rounded-lg px-4 py-2 text-sm", 
                                         message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
                                     )}
                                 >
-                                    {/* --- LOGIQUE DE RENDU : TEXTE OU GRAPHIQUE --- */}
                                     {typeof message.content === "string" ? (
                                         <div className="whitespace-pre-line">{message.content}</div>
                                     ) : (
@@ -215,6 +261,8 @@ export function Chatbot() {
                                 </div>
                             </div>
                         ))}
+                        
+                        {/* --- CORRECTION : Indicateur de chargement restauré --- */}
                         {isLoading && (
                             <div className="flex justify-start">
                                 <div className="max-w-[80%] rounded-lg px-4 py-2 text-sm bg-muted text-foreground">
@@ -226,9 +274,10 @@ export function Chatbot() {
                                 </div>
                             </div>
                         )}
+                        {/* --- FIN DE LA CORRECTION --- */}
                     </div>
 
-                    {/* Input inchangé */}
+                    {/* --- CORRECTION : Barre de saisie et bouton restaurés --- */}
                     <div className="flex gap-2">
                         <Input
                             value={input}
@@ -247,41 +296,37 @@ export function Chatbot() {
                             <Send className="h-4 w-4" />
                         </Button>
                     </div>
+                    {/* --- FIN DE LA CORRECTION --- */}
+                    
                 </CardContent>
             </Card>
         </>
     )
 }
 
-// --- COMPOSANT DE RENDU GRAPHIQUE (CORRIGÉ) ---
+// --- COMPOSANT DE RENDU GRAPHIQUE (INCHANGÉ) ---
 function BotChartMessage({ analysis, data }: { analysis: ChartAnalysis; data: ChartData }) {
     
     const valueFormatter = (value: any) => (typeof value === 'number' ? value.toLocaleString("fr") : value);
 
-    // --- CORRECTION DÉFENSIVE (Solution au crash) ---
-    // On déduit les clés des colonnes de données, PAS de l'analyse de l'IA.
-    // L'IA est mauvaise à ce jeu, mais les données SQL sont fiables.
     const indexKey = (data.columns && data.columns.length > 0) ? data.columns[0] : "index";
     const categoryKeys = (data.columns && data.columns.length > 1) ? data.columns.slice(1) : [];
     
-    // Si les données sont vides ou que l'IA a dit 'list', on ne dessine pas de graphique.
     const chartType = (analysis.chart_type === 'list' || !data.rows || data.rows.length === 0) 
         ? "list" 
         : analysis.chart_type;
-    // --- FIN DE LA CORRECTION ---
-
 
     const renderChart = () => {
         const chartHeight = 250
 
-        switch (chartType) { // Utilise la variable sécurisée 'chartType'
+        switch (chartType) { 
             case "bar":
                 return (
                     <ResponsiveContainer width="100%" height={chartHeight}>
                         <BarChart data={data.rows} margin={{ top: 5, right: 0, left: -20, bottom: 20 }}>
                             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                             <XAxis 
-                                dataKey={indexKey} // Clé sécurisée
+                                dataKey={indexKey} 
                                 angle={-10} 
                                 textAnchor="end" 
                                 height={60} 
@@ -292,7 +337,7 @@ function BotChartMessage({ analysis, data }: { analysis: ChartAnalysis; data: Ch
                             <YAxis fontSize={10} tick={{ fill: 'hsl(var(--foreground))' }} />
                             <Tooltip formatter={valueFormatter} wrapperClassName="text-xs !bg-popover !border-border" />
                             <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
-                            {categoryKeys.map((category, i) => ( // Tableau sécurisé
+                            {categoryKeys.map((category, i) => ( 
                                 <Bar key={category} dataKey={category} name={category} fill={COLORS[i % COLORS.length]} />
                             ))}
                         </BarChart>
@@ -305,8 +350,8 @@ function BotChartMessage({ analysis, data }: { analysis: ChartAnalysis; data: Ch
                         <PieChart>
                             <Pie
                                 data={data.rows}
-                                dataKey={categoryKeys[0]} // Clé de catégorie sécurisée
-                                nameKey={indexKey} // Clé d'index sécurisée
+                                dataKey={categoryKeys[0]} 
+                                nameKey={indexKey} 
                                 cx="50%"
                                 cy="50%"
                                 innerRadius="50%"
@@ -329,7 +374,7 @@ function BotChartMessage({ analysis, data }: { analysis: ChartAnalysis; data: Ch
                         <LineChart data={data.rows} margin={{ top: 5, right: 10, left: -20, bottom: 20 }}>
                             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                             <XAxis 
-                                dataKey={indexKey} // Clé sécurisée
+                                dataKey={indexKey} 
                                 fontSize={10} 
                                 tick={{ fill: 'hsl(var(--foreground))' }} 
                                 angle={-10} 
@@ -339,7 +384,7 @@ function BotChartMessage({ analysis, data }: { analysis: ChartAnalysis; data: Ch
                             <YAxis fontSize={10} tick={{ fill: 'hsl(var(--foreground))' }} />
                             <Tooltip formatter={valueFormatter} wrapperClassName="text-xs !bg-popover !border-border" />
                             <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
-                            {categoryKeys.map((category, i) => ( // Tableau sécurisé
+                            {categoryKeys.map((category, i) => ( 
                                 <Line key={category} type="monotone" dataKey={category} name={category} stroke={COLORS[i % COLORS.length]} />
                             ))}
                         </LineChart>
@@ -347,7 +392,6 @@ function BotChartMessage({ analysis, data }: { analysis: ChartAnalysis; data: Ch
                 )
             
             default: // "list"
-                // Ne rien afficher si le type est 'list' (données vides)
                 return null;
         }
     }
@@ -361,3 +405,48 @@ function BotChartMessage({ analysis, data }: { analysis: ChartAnalysis; data: Ch
     )
 }
 
+// --- STYLES (INCHANGÉS) ---
+const style = document.createElement('style');
+style.innerHTML = `
+    .typing-dot {
+        width: 6px;
+        height: 6px;
+        background-color: hsl(var(--muted-foreground));
+        border-radius: 50%;
+        display: inline-block;
+        animation: typing 1s infinite;
+    }
+    .typing-dot:nth-child(2) {
+        animation-delay: 0.15s;
+    }
+    .typing-dot:nth-child(3) {
+        animation-delay: 0.3s;
+    }
+    @keyframes typing {
+        0%, 80%, 100% {
+            transform: scale(0);
+        }
+        40% {
+            transform: scale(1.0);
+        }
+    }
+    .bg-background-inset {
+        background-color: #f1f5f9; /* Valeur par défaut pour light mode */
+    }
+    .text-foreground-inset {
+        color: #020817; /* Valeur par défaut pour light mode */
+    }
+    html.dark .bg-background-inset {
+        background-color: #020817; /* Mode dark */
+    }
+    html.dark .text-foreground-inset {
+        color: #f8fafc; /* Mode dark */
+    }
+    .recharts-cartesian-axis-tick-value {
+        fill: hsl(var(--foreground)) !important;
+    }
+`;
+if (!document.getElementById('chatbot-styles')) {
+    style.id = 'chatbot-styles';
+    document.head.appendChild(style);
+}
