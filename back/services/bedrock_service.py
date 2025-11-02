@@ -77,6 +77,7 @@ class BedrockService:
             return "sql"
         return "search"
 
+    # --- FONCTION generate_sql_query (PROMPT MIS À JOUR) ---
     def generate_sql_query(self, schema: str, user_query: str) -> str:
         """
         Génère une requête SQL à partir de la question de l'utilisateur et du schéma.
@@ -86,16 +87,19 @@ class BedrockService:
         -   Ne retourne QUE la requête SQL, sans aucune explication, commentaire ou balise (comme ```sql).
         
         --- RÈGLES STRICTES ---
-        1.  **Obéissance aux indices :** Les 'Indices de valeurs' (ex: 'INJURY') SONT la seule source de vérité. TU DOIS les utiliser.
+        1.  **[NOUVEAU] Une Seule Requête :** Tu DOIS générer *une seule et unique* requête SELECT. N'utilise PAS de `WITH ... AS` (Common Table Expressions), n'utilise pas de point-virgule (`;`), et n'écris pas plusieurs `SELECT` séparés.
         
-        2.  **Utilisation des IDs :** Si la question de l'utilisateur mentionne un ID spécifique (ex: "incident 83"), tu DOIS utiliser cet ID. N'AJOUTE PAS d'autres filtres textuels (comme `description = '...'`). L'ID est suffisant et prioritaire.
-            -   *Exemple de question :* "Coût des mesures pour l'incident 83 (le déversement)"
-            -   *Bon SQL :* `... WHERE e.event_id = 83`
-            -   *Mauvais SQL :* `... WHERE e.event_id = 83 AND e.description = 'le déversement'`
+        2.  **[NOUVEAU] Simplifier la "Gravité" :** La notion "le plus grave" est subjective. Interprète "les 100 incidents les plus graves" en te basant sur la colonne `risk.gravity`.
+            -   *Bon SQL :* `... JOIN risk r ON ... WHERE r.gravity = 'Critical' ORDER BY e.start_datetime DESC LIMIT 100`
+            -   *Mauvais SQL (interdit) :* `... ORDER BY e.classification = 'INJURY' ...` (C'est trop complexe).
+
+        3.  **Obéissance aux indices :** Les 'Indices de valeurs' (ex: 'INJURY') SONT la seule source de vérité. TU DOIS les utiliser.
         
-        3.  **Respect des jointures :** Tu NE DOIS PAS inventer de colonnes. Pour lier `event` et `corrective_measure`, tu DOIS utiliser `event_corrective_measure`.
+        4.  **Utilisation des IDs :** Si la question de l'utilisateur mentionne un ID spécifique (ex: "incident 83"), tu DOIS utiliser cet ID. N'AJOUTE PAS d'autres filtres textuels (comme `description = '...'`). L'ID est suffisant et prioritaire.
         
-        4.  **Contexte des COUNT :** Si la question demande un simple 'COUNT', préserve le contexte (ex: `SELECT type, COUNT(*) ... GROUP BY type`).
+        5.  **Respect des jointures :** Tu NE DOIS PAS inventer de colonnes. Pour lier `event` et `corrective_measure`, tu DOIS utiliser `event_corrective_measure`.
+        
+        6.  **Contexte des COUNT :** Si la question demande un simple 'COUNT', préserve le contexte (ex: `SELECT type, COUNT(*) ... GROUP BY type`).
         --- FIN DES RÈGLES ---
 
         --- SCHÉMA ---
