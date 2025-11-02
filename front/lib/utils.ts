@@ -19,47 +19,23 @@ export function getTypeColor(type: TypeEvent) {
   }
 }
 
-export function getTypeString(type: TypeEvent | null) {
-  if (!type) return ""
-  switch (type) {
-    case TypeEvent.EHS:
-        return "EHS"
-    case TypeEvent.DAMAGE:
-        return "Damage"
-    case TypeEvent.ENVIRONMENT:
-        return "Environment"
-    default:
-        return "Default"
-  }
+export function getTypeString(type: string | null) {
+    if (!type) {
+        return "Default";
+    } else {
+    const formatted = type.toUpperCase().replace(/_/g, ' ');
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+
+}
 }
 
-export function getClassificationString(classification: ClassificationEvent | null) {
-  if (!classification) return ""
-  switch (classification) {
-    case ClassificationEvent.INJURY:
-        return "Injury"
-    case ClassificationEvent.CHEMICAL_SPILL:
-        return "Chemical spill"
-    case ClassificationEvent.ENVIRONMENTAL_INCIDENT:
-        return "Environmental incident"
-    case ClassificationEvent.FIRE:
-        return "Fire"
-    case ClassificationEvent.EQUIPMENT_FAILURE:
-        return "Equipment failure"
-    case ClassificationEvent.FIRE_ALARM:
-        return "Fire alarm"
-    case ClassificationEvent.FIRST_AID:
-        return "First aid"
-    case ClassificationEvent.LOST_TIME:
-        return "Lost time"
-    case ClassificationEvent.NEAR_MISS:
-        return "Near miss"
-    case ClassificationEvent.PREVENTIVE_DECLARATION:
-      return "Preventive declaration"
-      case ClassificationEvent.PROPERTY_DAMAGE:
-        return "Property damage"
-    default:
-        return "Default"
-  }
+export function getClassificationString(classification: string | null): string {
+    if (!classification) {
+        return "Default";
+    }
+    if(classification==="EHS") return classification
+    const formatted = classification.toLowerCase().replace(/_/g, ' ');
+
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 

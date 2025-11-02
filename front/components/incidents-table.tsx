@@ -6,18 +6,24 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Search, ChevronLeft, ChevronRight, Filter } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { Search, ChevronLeft, ChevronRight, Filter, CalendarIcon, X } from "lucide-react"
+import { useRouter } from "next/navigation" // Importation problématique
 import { format } from "date-fns"
-import { AdvancedFilters } from "@/components/advanced-filters"
+
 import { ClassificationEvent, TypeEvent, type Incident } from "@/lib/data/incidents-data"
-import { getTypeColor } from "@/lib/utils"
+import { getTypeColor, getClassificationString } from "@/lib/utils"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+
+
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 const ITEMS_PER_PAGE = 20
 
-// L'interface Filters reste la même, la logique d'application changera
+// --- Interface de Filtres ---
 interface Filters {
     eventId: string
     employeeMatricule: string
@@ -31,23 +37,16 @@ interface Filters {
     endYear: string
 }
 
-interface ApiReporter {
-    id: number
-    matricule: string | null
-    name: string | null
-    family_name: string | null
-    role: string | null
-}
-
-interface ApiEvent {
-    id: number
-    type: string | null
-    classification: string | null
-    start_datetime: string | null
-    end_datetime: string | null
-    description: string | null
-    reporter: ApiReporter | null
-}
+// --- Fonctions Helper (inchangées) ---
+const normalizeFilters = (raw: Filters): Filters => ({
+    ...raw,
+    eventId: raw.eventId.trim(),
+    employeeMatricule: raw.employeeMatricule.trim(),
+    type: raw.type.trim(),
+    classification: raw.classification.trim(),
+    startYear: raw.startYear.trim(),
+    endYear: raw.endYear.trim(),
+})
 
 const createInitialFilters = (): Filters => ({
     eventId: "",
@@ -61,52 +60,225 @@ const createInitialFilters = (): Filters => ({
     startYear: "",
     endYear: "",
 })
-
-const normalizeFilters = (raw: Filters): Filters => ({
-    ...raw,
-    eventId: raw.eventId.trim(),
-    employeeMatricule: raw.employeeMatricule.trim(),
-    type: raw.type.trim(),
-    classification: raw.classification.trim(),
-    startYear: raw.startYear.trim(),
-    endYear: raw.endYear.trim(),
-})
-
 const formatDateForApi = (value?: Date) => (value ? format(value, "yyyy-MM-dd") : undefined)
 
+
+// ==================================================================
+// --- COMPOSANT ADVANCEDFILTERS (Intégré) ---
+// ==================================================================
+interface AdvancedFiltersProps {
+    filters: Filters
+    onFilterChange: (filters: Filters) => void
+    onApplyFilters?: () => void
+    isApplying?: boolean
+}
+
+export function AdvancedFilters({ filters, onFilterChange, onApplyFilters, isApplying = false }: AdvancedFiltersProps) {
+    const [types, setTypes] = useState<TypeEvent[]>([])
+    const [classifications, setClassifications] = useState<ClassificationEvent[]>([])
+
+
+    useEffect(() => {
+        fetchFilterOptions()
+    }, [])
+
+    function fetchFilterOptions() {
+        // Utilise les objets simulés
+        const uniqueTypes = Object.values(TypeEvent)
+        const uniqueClassifications = Object.values(ClassificationEvent)
+        setTypes(uniqueTypes)
+        setClassifications(uniqueClassifications)
+    }
+
+    const handleClearFilters = () => {
+        onFilterChange({
+            eventId: "",
+            employeeMatricule: "",
+            type: "",
+            classification: "",
+            startDate: undefined,
+            endDate: undefined,
+            startMonth: undefined,
+            endMonth: undefined,
+            startYear: "",
+            endYear: "",
+        })
+    }
+
+    const currentYear = new Date().getFullYear()
+    const years = Array.from({ length: 10 }, (_, i) => (currentYear - i).toString())
+
+    return (
+        <div className="p-4 border rounded-lg bg-muted/50 space-y-4">
+            <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold text-sm">Advanced Filters</h3>
+                <Button variant="ghost" size="sm" onClick={handleClearFilters}>
+                    <X className="h-4 w-4 mr-1" />
+                    Clear All
+                </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Event ID */}
+                <div className="space-y-2">
+                    <Label htmlFor="eventId">Event ID</Label>
+                    <Input
+                        id="eventId"
+                        placeholder="Enter event ID..."
+                        value={filters.eventId}
+                        onChange={(e) => onFilterChange({ ...filters, eventId: e.target.value })}
+                    />
+                </div>
+
+                {/* Employee Matricule */}
+                <div className="space-y-2">
+                    <Label htmlFor="employeeMatricule">Employee Matricule</Label>
+                    <Input
+                        id="employeeMatricule"
+                        placeholder="Enter matricule..."
+                        value={filters.employeeMatricule}
+                        onChange={(e) => onFilterChange({ ...filters, employeeMatricule: e.target.value })}
+                    />
+                </div>
+
+                {/* Type */}
+                <div className="space-y-2">
+                    <Label htmlFor="type">Type</Label>
+                    <Select value={ filters.type } onValueChange={(value) => onFilterChange({ ...filters, type: value })}>
+                        <SelectTrigger id="type">
+                            <SelectValue placeholder="Select type..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value=" ">All types</SelectItem>
+                            {types.map((type) => (
+                                <SelectItem key={type} value={type}>
+                                    {getClassificationString(type)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {/* Classification */}
+                <div className="space-y-2">
+                    <Label htmlFor="classification">Classification</Label>
+                    <Select
+                        value={filters.classification}
+                        onValueChange={(value) => onFilterChange({ ...filters, classification: value })}
+                    >
+                        <SelectTrigger id="classification">
+                            <SelectValue placeholder="Select classification..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value=" ">All classifications</SelectItem>
+                            {classifications.map((classification) => (
+                                <SelectItem key={classification} value={classification}>
+                                    {getClassificationString(classification)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {/* Start Date */}
+                <div className="space-y-2">
+                    <Label>Start Date</Label>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {filters.startDate ? format(filters.startDate, "PPP") : "Pick a date"}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                            <Calendar
+                                mode="single"
+                                selected={filters.startDate}
+                                onSelect={(date) => onFilterChange({ ...filters, startDate: date })}
+                                initialFocus
+                            />
+                        </PopoverContent>
+                    </Popover>
+                </div>
+
+                {/* End Date */}
+                <div className="space-y-2">
+                    <Label>End Date</Label>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start text-left font-normal bg-transparent">
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {filters.endDate ? format(filters.endDate, "PPP") : "Pick a date"}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                            <Calendar
+                                mode="single"
+                                selected={filters.endDate}
+                                onSelect={(date) => onFilterChange({ ...filters, endDate: date })}
+                                initialFocus
+                            />
+                        </PopoverContent>
+                    </Popover>
+                </div>
+
+            </div>
+
+            {onApplyFilters && (
+                <div className="flex justify-end">
+                    <Button type="button" onClick={onApplyFilters} disabled={isApplying}>
+                        Filtrer
+                    </Button>
+                </div>
+            )}
+        </div>
+    )
+}
+
+
+// ==================================================================
+// --- COMPOSANT INCIDENTSTABLE (Mis à jour) ---
+// ==================================================================
 export function IncidentsTable() {
-    const [incidents, setIncidents] = useState<Incident[]>([])
+    const [incidents, setIncidents] = useState<Incident[]>([]) // Ne contiendra que la page actuelle
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [totalAvailable, setTotalAvailable] = useState(0)
-    const [searchTerm, setSearchTerm] = useState("")
+    const [totalAvailable, setTotalAvailable] = useState(0) // Total des éléments (venant de l'API)
+    // SUPPRIMÉ: searchTerm
     const [currentPage, setCurrentPage] = useState(1)
-    const [showFilters, setShowFilters] = useState(false)
+
+    // ****** MODIFICATION ICI ******
+    // Les filtres sont maintenant visibles par défaut
+    const [showFilters, setShowFilters] = useState(true)
+    // ****** FIN DE LA MODIFICATION ******
+
     const [filters, setFilters] = useState<Filters>(() => createInitialFilters())
     const [appliedFilters, setAppliedFilters] = useState<Filters>(() => createInitialFilters())
     const router = useRouter()
+
+    // SUPPRIMÉ: debouncedSearchTerm
 
     useEffect(() => {
         let ignore = false
         const controller = new AbortController()
 
-        const fetchAllIncidents = async () => {
+        // RENOMMÉ: N'obtient que la page actuelle
+        const fetchIncidentsPage = async () => {
             setLoading(true)
             setError(null)
 
             try {
-                const aggregated: Incident[] = []
-                let offset = 0
-                let hasMore = true
-                const maxIterations = 50
-                let iteration = 0
-                let totalCountFromApi: number | null = null
+                // MODIFIÉ: L'offset est calculé basé sur la page actuelle
+                const offset = (currentPage - 1) * ITEMS_PER_PAGE
 
                 const buildQueryParams = (offsetValue: number) => {
                     const params = new URLSearchParams()
                     params.set("offset", offsetValue.toString())
                     params.set("limit", ITEMS_PER_PAGE.toString())
 
+                    // SUPPRIMÉ: Logique de recherche (searchTerm)
+
+                    // Vos filtres avancés (appliedFilters) sont conservés
                     const { eventId, employeeMatricule, type, classification, startDate, endDate } = appliedFilters
 
                     if (eventId) {
@@ -115,24 +287,19 @@ export function IncidentsTable() {
                             params.set("event_id", parsedEventId.toString())
                         }
                     }
-
                     if (employeeMatricule) {
                         params.set("employee_matricule", employeeMatricule)
                     }
-
                     if (type) {
                         params.set("type", type)
                     }
-
                     if (classification) {
                         params.set("classification", classification)
                     }
-
                     const formattedStart = formatDateForApi(startDate)
                     if (formattedStart) {
                         params.set("start_date", formattedStart)
                     }
-
                     const formattedEnd = formatDateForApi(endDate)
                     if (formattedEnd) {
                         params.set("end_date", formattedEnd)
@@ -141,87 +308,97 @@ export function IncidentsTable() {
                     return params
                 }
 
-                while (hasMore && !ignore) {
-                    const params = buildQueryParams(offset)
-                    const response = await fetch(`${API_BASE_URL}/get_events?${params.toString()}`, {
-                        headers: { accept: "application/json" },
-                        cache: "no-store",
-                        signal: controller.signal,
-                    })
+                // MODIFIÉ: Plus de boucle 'while'. Un seul appel.
+                const params = buildQueryParams(offset)
+                const response = await fetch(`${API_BASE_URL}/get_events?${params.toString()}`, {
+                    headers: { accept: "application/json" },
+                    cache: "no-store",
+                    signal: controller.signal,
+                })
 
-                    if (!response.ok) {
-                        const message = await response.text()
-                        throw new Error(`Failed to fetch incidents (status ${response.status}): ${message}`)
-                    }
-
-                    const data = (await response.json()) as {
-                        events?: ApiEvent[]
-                        count?: number
-                        total_count?: number
-                    }
-
-                    if (typeof data.total_count === "number") {
-                        totalCountFromApi = data.total_count
-                    }
-
-                    const events = Array.isArray(data.events) ? data.events : []
-                    aggregated.push(
-                        ...events.map<Incident>((event) => {
-                            const asType = (value: string | null): TypeEvent | null => {
-                                if (!value) return null
-                                return (Object.values(TypeEvent) as string[]).includes(value)
-                                    ? (value as TypeEvent)
-                                    : null
-                            }
-
-                            const asClassification = (value: string | null): ClassificationEvent | null => {
-                                if (!value) return null
-                                return (Object.values(ClassificationEvent) as string[]).includes(value)
-                                    ? (value as ClassificationEvent)
-                                    : null
-                            }
-
-                            return {
-                                id: event.id,
-                                type: asType(event.type),
-                                classification: asClassification(event.classification),
-                                start_datetime: event.start_datetime ? new Date(event.start_datetime) : null,
-                                end_datetime: event.end_datetime ? new Date(event.end_datetime) : null,
-                                description: event.description ?? null,
-                                person: event.reporter
-                                    ? {
-                                        id: event.reporter.id,
-                                        matricule: event.reporter.matricule ?? "",
-                                        name: event.reporter.name ?? "",
-                                        family_name: event.reporter.family_name ?? "",
-                                        role: event.reporter.role ?? null,
-                                    }
-                                    : null,
-                                employees: null,
-                                corrective_measures: null,
-                                organizational_unit: null,
-                                risks: null,
-                            }
-                        }),
-                    )
-
-                    iteration += 1
-                    if (!data.count || data.count < ITEMS_PER_PAGE || iteration >= maxIterations) {
-                        hasMore = false
-                    } else {
-                        offset += ITEMS_PER_PAGE
-                    }
+                if (!response.ok) {
+                    const message = await response.text()
+                    throw new Error(`Failed to fetch incidents (status ${response.status}): ${message}`)
                 }
+
+                const data = (await response.json()) as {
+                    events?: Incident[]
+                    count?: number
+                    total_count?: number
+                }
+
+                const events = Array.isArray(data.events) ? data.events : []
+
+                // +++ CONSOLE LOGS (ÉTAPE 1) +++
+                console.log("--- ÉTAPE 1: RÉPONSE API ---");
+                console.log(`Nombre d'événements reçus: ${events.length}`);
+                if (events.length > 0) {
+                    console.log("events[0] brut de l'API:", events[0]);
+                    console.log("events[0].person brut de l'API:", events[0].person);
+                }
+                // +++ FIN DES LOGS +++
+
+                // La logique de transformation est correcte et conservée
+                const transformedIncidents = events.map<Incident>((event) => {
+
+                    // +++ CONSOLE LOGS (ÉTAPE 2) +++
+                    console.log(`--- ÉTAPE 2: TRANSFORMATION (ID: ${event.id}) ---`);
+                    console.log("event.person reçu par le .map():", event.person);
+                    // +++ FIN DES LOGS +++
+
+                    const asType = (value: string | null): TypeEvent | null => { return event.type ?? null }
+                    const asClassification = (value: string | null): ClassificationEvent | null => { return event.classification ?? null }
+
+                    const newPersonObject = event.person
+                        ? {
+                            id: event.person?.id,
+                            matricule: event.person.matricule ?? "",
+                            name: event.person.name ?? "",
+                            family_name: event.person.family_name ?? "",
+                            role: event.person.role ?? null,
+                        }
+                        : null;
+
+                    // +++ CONSOLE LOGS (ÉTAPE 3) +++
+                    console.log(`Nouvel objet 'person' créé (ID: ${event.id}):`, newPersonObject);
+                    // +++ FIN DES LOGS +++
+
+                    return {
+                        id: event.id,
+                        type: asType(event.type),
+                        classification: asClassification(event.classification),
+                        start_datetime: event.start_datetime ? new Date(event.start_datetime) : null,
+                        end_datetime: event.end_datetime ? new Date(event.end_datetime) : null,
+                        description: event.description ?? null,
+                        person: newPersonObject, // Utilise l'objet tracé
+                        employees: null,
+                        corrective_measures: null,
+                        organizational_unit: null,
+                        risks: null,
+                    }
+                })
+
+                // +++ CONSOLE LOGS (ÉTAPE 4) +++
+                console.log("--- ÉTAPE 4: APRÈS TRANSFORMATION ---");
+                if (transformedIncidents.length > 0) {
+                    console.log("Premier incident transformé (complet):", transformedIncidents[0]);
+                    console.log("person du premier incident transformé:", transformedIncidents[0].person);
+                }
+                // +++ FIN DES LOGS +++
 
                 if (!ignore) {
-                    setIncidents(aggregated)
-                    setTotalAvailable(totalCountFromApi ?? aggregated.length)
+                    // MODIFIÉ: On sauvegarde la page actuelle
+                    setIncidents(transformedIncidents)
+                    // MODIFIÉ: On sauvegarde le total de l'API
+                    setTotalAvailable(data.total_count ?? 0)
                 }
+
             } catch (fetchError) {
                 if (!ignore) {
                     console.error("Error fetching incidents:", fetchError)
                     setError("Une erreur est survenue lors de la récupération des incidents.")
                     setIncidents([])
+                    setTotalAvailable(0) // Réinitialiser en cas d'erreur
                 }
             } finally {
                 if (!ignore) {
@@ -230,83 +407,36 @@ export function IncidentsTable() {
             }
         }
 
-        void fetchAllIncidents()
+        void fetchIncidentsPage()
 
         return () => {
             ignore = true
             controller.abort()
         }
-    }, [appliedFilters])
+        // MODIFIÉ: Dépendances mises à jour
+    }, [appliedFilters, currentPage]) // SUPPRIMÉ: debouncedSearchTerm
 
-    const filteredIncidents = useMemo(() => {
-        let dataset = incidents
-
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase()
-            dataset = dataset.filter((incident) => {
-                const person = incident.person
-                const matchesReporter =
-                    person &&
-                    [
-                        person.matricule,
-                        person.name,
-                        person.family_name,
-                    ]
-                        .filter(Boolean)
-                        .some((value) => value!.toLowerCase().includes(term))
-
-                const matchesType = incident.type?.toLowerCase().includes(term) ?? false
-                const matchesClassification = incident.classification?.toLowerCase().includes(term) ?? false
-                const matchesDescription = incident.description?.toLowerCase().includes(term) ?? false
-
-                return matchesReporter || matchesType || matchesClassification || matchesDescription
-            })
-        }
-
-        // Placeholder for future filter logic
-        return dataset
-    }, [incidents, searchTerm])
-
-    const filteredCount = filteredIncidents.length
-    const hasSearch = searchTerm.trim().length > 0
-    const hasAdvancedFilters = Object.entries(appliedFilters).some(([key, value]) => {
-        if (
-            key === "startDate" ||
-            key === "endDate" ||
-            key === "startMonth" ||
-            key === "endMonth"
-        ) {
-            return value instanceof Date
-        }
-        return typeof value === "string" ? value.trim().length > 0 : false
-    })
-    const baseTotalCount = totalAvailable || filteredCount
-    const totalCount = hasSearch || hasAdvancedFilters ? filteredCount : baseTotalCount
+    // MODIFIÉ: Logique de comptage simplifiée
+    const totalCount = totalAvailable // Le total vient de l'API
     const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE) || 1
-    const paginatedIncidents = useMemo(() => {
-        const start = (currentPage - 1) * ITEMS_PER_PAGE
-        return filteredIncidents.slice(start, start + ITEMS_PER_PAGE)
-    }, [filteredIncidents, currentPage])
     const rangeStart = totalCount === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1
-    const rangeEndBase = hasSearch || hasAdvancedFilters ? filteredCount : totalCount
-    const rangeEnd = totalCount === 0 ? 0 : Math.min(currentPage * ITEMS_PER_PAGE, rangeEndBase)
+    const rangeEnd = totalCount === 0 ? 0 : Math.min(currentPage * ITEMS_PER_PAGE, totalCount)
 
+    // MODIFIÉ: Logique de correction de page
     useEffect(() => {
-        if (currentPage > totalPages) {
-            setCurrentPage(Math.max(1, totalPages))
+        if (currentPage > totalPages && totalPages > 0) {
+            setCurrentPage(totalPages)
         }
     }, [currentPage, totalPages])
 
-    const handleSearch = (value: string) => {
-        setSearchTerm(value)
-        setCurrentPage(1)
-    }
+    // SUPPRIMÉ: handleSearch
 
     const handleFilterChange = (newFilters: Filters) => {
         setFilters(newFilters)
-        setCurrentPage(1)
+        // On ne change pas de page ici, on attend 'Apply'
     }
 
+    // MODIFIÉ: handleApplyFilters applique les filtres et réinitialise la page
     const handleApplyFilters = () => {
         setCurrentPage(1)
         setAppliedFilters(normalizeFilters(filters))
@@ -321,6 +451,7 @@ export function IncidentsTable() {
             <CardContent>
                 <div className="mb-6 space-y-4">
                     <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                        {/* SUPPRIMÉ: Barre de recherche (Input) */}
                         <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
                             <Filter className="h-4 w-4 mr-2" />
                             {showFilters ? "Hide Filters" : "Show Filters"}
@@ -345,7 +476,7 @@ export function IncidentsTable() {
                     <div className="flex items-center justify-center py-12">
                         <div className="text-muted-foreground">{error}</div>
                     </div>
-                ) : filteredCount === 0 ? (
+                ) : totalCount === 0 ? (
                     <div className="flex items-center justify-center py-12">
                         <div className="text-muted-foreground">No incidents found</div>
                     </div>
@@ -356,7 +487,7 @@ export function IncidentsTable() {
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead className="w-[100px]">ID</TableHead>
-                                        <TableHead>Reporter</TableHead> {/* Libellé changé pour 'Reporter' */}
+                                        <TableHead>Reporter</TableHead>
                                         <TableHead>Type</TableHead>
                                         <TableHead>Classification</TableHead>
                                         <TableHead>Start Date</TableHead>
@@ -364,52 +495,54 @@ export function IncidentsTable() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {paginatedIncidents.map((incident) => (
-                                        <TableRow
-                                            key={incident.id}
-                                            className="cursor-pointer hover:bg-accent/50 transition-colors"
-                                            onClick={() => router.push(`/incident/${incident.id}`)}
-                                        >
-                                            {/* Corrigé: .id est un nombre, .slice() est supprimé */}
-                                            <TableCell className="text-xs">{incident.id}</TableCell>
+                                    {/* MODIFIÉ: Map directement sur 'incidents' */}
+                                    {incidents.map((incident) => {
 
-                                            {/* Corrigé: Affiche le nom et le matricule du reporter */}
-                                            <TableCell>
-                                                <div className="font-medium">{incident.person?.name} {incident.person?.family_name}</div>
-                                                <div className="text-xs text-muted-foreground">{incident.person?.matricule}</div>
-                                            </TableCell>
+                                        // +++ CONSOLE LOGS (ÉTAPE 5) +++
+                                        console.log(`--- ÉTAPE 5: RENDU (ID: ${incident.id}) ---`);
+                                        console.log("incident.person au moment du rendu:", incident.person);
+                                        // +++ FIN DES LOGS +++
 
-                                            <TableCell>
-                                                {incident.type &&
-                                                <Badge variant="outline" className={getTypeColor(incident.type)}>
-                                                    {incident.type}
-                                                </Badge>}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="secondary" className="bg-primary/10 text-primary">
-                                                    {incident.classification}
-                                                </Badge>
-                                            </TableCell>
-
-                                            {/* Corrigé: 'start_date' est déjà une Date */}
-                                            {incident.start_datetime && <TableCell>{format(incident.start_datetime, "MMM dd, yyyy HH:mm")}</TableCell>}
-
-                                            {/* Corrigé: 'end_date' est déjà une Date */}
-                                            <TableCell>
-                                                {incident.end_datetime ? format(incident.end_datetime, "MMM dd, yyyy HH:mm") : "—"}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
+                                        return (
+                                            <TableRow
+                                                key={incident.id}
+                                                className="cursor-pointer hover:bg-accent/50 transition-colors"
+                                                onClick={() => router.push(`/incident/${incident.id}`)}
+                                            >
+                                                <TableCell className="text-xs">{incident.id}</TableCell>
+                                                <TableCell>
+                                                    <div className="font-medium">{incident.person?.name} {incident.person?.family_name}</div>
+                                                    <div className="text-xs text-muted-foreground">{incident.person?.matricule}</div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {incident.type &&
+                                                        <Badge variant="outline" className={getTypeColor(incident.type)}>
+                                                            {incident.type}
+                                                        </Badge>}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="secondary" className="bg-primary/10 text-primary">
+                                                        {getClassificationString(incident.classification)}
+                                                    </Badge>
+                                                </TableCell>
+                                                {incident.start_datetime && <TableCell>{format(new Date(incident.start_datetime), "MMM dd, yyyy HH:mm")}</TableCell>}
+                                                <TableCell>
+                                                    {incident.end_datetime ? format(new Date(incident.end_datetime), "MMM dd, yyyy HH:mm") : "—"}
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
                                 </TableBody>
                             </Table>
                         </div>
 
                         <div className="flex items-center justify-between mt-6">
                             <div className="text-sm text-muted-foreground">
-                                {filteredCount === 0 ? (
+                                {totalCount === 0 ? (
                                     "Showing 0 incidents"
                                 ) : (
                                     <>
+                                        {/* MODIFIÉ: Utilise les nouvelles variables de comptage */}
                                         Showing {rangeStart} to {rangeEnd} of {totalCount} incidents
                                     </>
                                 )}
@@ -431,7 +564,7 @@ export function IncidentsTable() {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                                    disabled={currentPage === totalPages || totalPages === 0} // Ajout de totalPages === 0
+                                    disabled={currentPage === totalPages} // Simplifié
                                 >
                                     Next
                                     <ChevronRight className="h-4 w-4 ml-1" />
@@ -444,3 +577,4 @@ export function IncidentsTable() {
         </Card>
     )
 }
+

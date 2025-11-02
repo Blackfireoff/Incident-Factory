@@ -102,7 +102,7 @@ export function IncidentDetail({ incident, linkedEmployees, risks, correctiveMea
                                 <div>
                                     <div className="text-sm font-medium text-muted-foreground mb-1">End Date</div>
                                     <div className="font-medium">
-                                        {incident.end_datetime ? format(incident.end_datetime, "MMMM dd, yyyy 'at' HH:mm") : "Ongoing"}
+                                        {incident.end_datetime ? format(incident.end_datetime, "MMMM dd, yyyy 'at' HH:mm") : "—"}
                                     </div>
                                 </div>
                             </div>
@@ -125,7 +125,7 @@ export function IncidentDetail({ incident, linkedEmployees, risks, correctiveMea
                                     <div className="text-sm font-medium text-muted-foreground mb-1">Organizational Unit</div>
                                     <div className="font-medium">{incident.organizational_unit?.name ?? "Unknown"}</div>
                                     <div className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
-                                        <MapPin className="h-4 w-4" /> {incident.organizational_unit?.location ?? "Unknown"}
+                                         {incident.organizational_unit?.location ?? "Unknown"}
                                     </div>
                                 </div>
                             </div>
@@ -146,53 +146,57 @@ export function IncidentDetail({ incident, linkedEmployees, risks, correctiveMea
                         {correctiveMeasures.length === 0 ? (
                             <p className="text-sm text-muted-foreground">No corrective measures</p>
                         ) : (
-                            <div className="relative">
-                                <div className="flex gap-4 overflow-x-auto pb-4">
-                                    {correctiveMeasures.map((measure) => (
-                                        <div
-                                            key={measure.id}
-                                            className="min-w-[280px] max-w-xs flex-shrink-0 p-4 rounded-lg border bg-card shadow-sm"
-                                        >
-                                            <div className="font-semibold text-foreground mb-2">{measure.name}</div>
-                                            <p className="text-sm text-foreground leading-relaxed mb-3">{measure.description}</p>
-                                            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                                                <Clock className="h-4 w-4" />
-                                                <span>Due: {format(measure.implementation, "MMMM dd, yyyy")}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                                                <Briefcase className="h-4 w-4" />
-                                                <span>Unit: {measure.organization_unit?.name}</span>
-                                            </div>
-                                            <Separator className="my-3" />
-                                            <div className="flex items-center justify-between text-sm">
-                                                <div>
-                                                    <span className="text-muted-foreground">Owner: </span>
-                                                    <span className="font-medium">{measure.owner.name} {measure.owner.family_name}</span>
+                            <> {/* Fragment pour envelopper la liste et le total */}
+                                <div className="relative">
+                                    <div className="flex gap-4 overflow-x-auto pb-4">
+                                        {correctiveMeasures.map((measure) => (
+                                            <div
+                                                key={measure.id}
+                                                // CHANGEMENT: Augmentation de la largeur
+                                                className="min-w-[350px] max-w-md flex-shrink-0 p-4 rounded-lg border bg-card shadow-sm"
+                                            >
+                                                <div className="font-semibold text-foreground mb-2">{measure.name}</div>
+                                                <p className="text-sm text-foreground leading-relaxed mb-3">{measure.description}</p>
+                                                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                                                    <Clock className="h-4 w-4" />
+                                                    {/* Assurez-vous que measure.implementation est un objet Date ou un timestamp */}
+                                                    <span>Due: {format(new Date(measure.implementation), "MMMM dd, yyyy")}</span>
                                                 </div>
-                                                <div className="flex items-center gap-1 text-sm font-semibold text-primary">
-                                                    <DollarSign className="h-4 w-4" />
-                                                    {measure.cost.toLocaleString("en-US", {
-                                                        minimumFractionDigits: 2,
-                                                        maximumFractionDigits: 2,
-                                                    })}
+                                                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+                                                    <Briefcase className="h-4 w-4" />
+                                                    <span>Unit: {measure.organization_unit?.name}</span>
+                                                </div>
+                                                <Separator className="my-3" />
+                                                <div className="flex items-center justify-between text-sm">
+                                                    <div>
+                                                        <span className="text-muted-foreground">Owner: </span>
+                                                        <span className="font-medium">{measure.owner.name} {measure.owner.family_name}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1 text-sm font-semibold text-primary">
+                                                        <DollarSign className="h-4 w-4" />
+                                                        {measure.cost.toLocaleString("en-US", {
+                                                            minimumFractionDigits: 2,
+                                                            maximumFractionDigits: 2,
+                                                        })}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
 
-                                {/* Total fixed below */}
+                                {/* CHANGEMENT: Total déplacé en bas de CardContent */}
                                 <div className="border-t pt-4 mt-2 flex items-center justify-between bg-background/60 backdrop-blur-sm rounded-b-lg p-3">
                                     <span className="font-semibold text-foreground">Total Cost</span>
-                                    <span className="text-xl font-bold text-primary flex items-center gap-1">
-                    <DollarSign className="h-5 w-5" />
+                                    <span className="text-lg font-bold text-primary flex items-center gap-1"> {/* CHANGEMENT: text-xl -> text-lg */}
+                                        <DollarSign className="h-5 w-5" />
                                         {totalCost.toLocaleString("en-US", {
                                             minimumFractionDigits: 2,
                                             maximumFractionDigits: 2,
                                         })}
-                  </span>
+                    </span>
                                 </div>
-                            </div>
+                            </>
                         )}
                     </CardContent>
                 </Card>

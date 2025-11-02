@@ -900,7 +900,7 @@ async def get_events(
                     "start_datetime": event["start_datetime"],
                     "end_datetime": event["end_datetime"],
                     "description": event["description"],
-                    "reporter": reporter,
+                    "person": reporter,
                 }
             )
 
