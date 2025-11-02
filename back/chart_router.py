@@ -61,20 +61,20 @@ async def handle_ai_chart(request: AIChartRequest):
     user_query = request.query
     
     try:
-        # ÉTAPE 1: Générer le SQL (pas de RAG, c'est un graphique)
+        # ÉTAPE 1: Générer le SQL
         print(f"Agent Graphique: Génération SQL pour: '{user_query}'")
         sql_query = bedrock_service.generate_sql_query(DB_SCHEMA, user_query)
         
         # ÉTAPE 2: Exécuter le SQL
         print(f"Agent Graphique: Exécution: '{sql_query}'")
         try:
-            sql_results, columns = sql_service.execute_safe_sql(sql_query)
+            sql_results, columns = sql_service.execute_safe_sql(sql_query) # <-- 'columns' est récupéré ici
             serializable_results = convert_datetime_to_str(sql_results)
             context_json = json.dumps(serializable_results)
             data_payload = {"columns": columns, "rows": serializable_results}
             
             # Gérer les cas d'erreur SQL avant d'appeler Bedrock
-            if any("Erreur" in row for row in serializable_results):
+            if serializable_results and "Erreur" in serializable_results[0]:
                  return {
                     "type": "error",
                     "analysis": {"chart_type": "list", "title": "Erreur SQL", "insight": serializable_results[0]["Erreur"]},
@@ -88,12 +88,16 @@ async def handle_ai_chart(request: AIChartRequest):
 
         # ÉTAPE 3: Demander à l'IA d'analyser les données
         print("Agent Graphique: Génération de l'analyse du graphique...")
-        chart_analysis = bedrock_service.generate_chart_analysis(user_query, context_json)
+        
+        # --- CORRECTION ICI ---
+        # Assurez-vous que 'columns' est bien passé en troisième argument
+        chart_analysis = bedrock_service.generate_chart_analysis(user_query, context_json, columns)
+        # --- FIN DE LA CORRECTION ---
         
         # ÉTAPE 4: Retourner le package de données pour le frontend
         return {
             "type": "chart",
-            "analysis": chart_analysis, # ex: {"chart_type": "bar", "title": "...", "insight": "..."}
+            "analysis": chart_analysis, # ex: {"chart_type": "bar", "title": "...", "index": "name", "categories": ["count"]}
             "data": data_payload,
             "query": sql_query
         }

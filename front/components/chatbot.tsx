@@ -28,13 +28,12 @@ import {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 type ChatMode = "query" | "graphic" | "summary"
 
-// --- INTERFACES POUR LES DONNÉES DE GRAPHIQUE ---
+// --- INTERFACES POUR LES DONNÉES DE GRAPHIQUE (SIMPLIFIÉES) ---
 interface ChartAnalysis {
     chart_type: "bar" | "pie" | "line" | "list"
     title: string
     insight: string
-    index: string // La clé pour l'axe X (ex: 'name')
-    categories: string[] // Les clés pour les valeurs (ex: ['count'])
+    // 'index' et 'categories' sont retirés, ils viendront des données brutes
 }
 interface ChartData {
     columns: string[]
@@ -44,15 +43,12 @@ interface ChartResponse {
     analysis: ChartAnalysis
     data: ChartData
 }
-// Type pour les messages : peut être du texte ou un objet graphique
 type MessageContent = string | { type: "chart"; payload: ChartResponse }
 
-// Couleurs pour les graphiques (type Pie)
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8", "#FF0000"]
 
 export function Chatbot() {
     const [isOpen, setIsOpen] = useState(false)
-    // --- ÉTAT MIS À JOUR ---
     const [messages, setMessages] = useState<{ role: "user" | "bot"; content: MessageContent }[]>([
         { role: "bot", content: "Bonjour! Je suis prêt à analyser vos données. Posez-moi une question." },
     ])
@@ -75,7 +71,6 @@ export function Chatbot() {
                 await handleGraphicMode(userMessage)
             } else {
                 setMessages((prev) => [...prev, { role: "bot", content: "La fonction de synthèse sera bientôt disponible." }])
-                setIsLoading(false) // Oubli de setIsLoading(false) dans le code d'origine
             }
         } catch (error) {
             console.error("Error in handleSend:", error)
@@ -84,53 +79,64 @@ export function Chatbot() {
                 { role: "bot", content: "Une erreur de communication est survenue. Veuillez réessayer." },
             ])
         } finally {
-            // S'assurer que isLoading est toujours remis à false
             setIsLoading(false)
         }
     }
 
-    // --- GÈRE L'ANCIENNE ROUTE /ai/query ---
     const handleQueryMode = async (userMessage: string) => {
-        const response = await fetch(`${API_BASE_URL}/ai/query`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", accept: "application/json" },
-            body: JSON.stringify({ query: userMessage }),
-        })
-        const body = (await response.json()) as Record<string, unknown>
-        let answerText = "Je n'ai pas pu obtenir de réponse."
+        try {
+            const response = await fetch(`${API_BASE_URL}/ai/query`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", accept: "application/json" },
+                body: JSON.stringify({ query: userMessage }),
+            })
+            const body = (await response.json()) as Record<string, unknown>
+            let answerText = "Je n'ai pas pu obtenir de réponse."
 
-        if (body && typeof body.response === "string") {
-            answerText = body.response
-        } else if (!response.ok) {
-            answerText = `Erreur API: statut ${response.status}`
+            if (body && typeof body.response === "string") {
+                answerText = body.response
+            } else if (!response.ok) {
+                answerText = `Erreur API: statut ${response.status}`
+            }
+            setMessages((prev) => [...prev, { role: "bot", content: answerText }])
+        } catch (error) {
+            console.error("Error calling /ai/query:", error)
+            throw error 
+        } finally {
+            setIsLoading(false) 
         }
-        setMessages((prev) => [...prev, { role: "bot", content: answerText }])
     }
 
-    // --- GÈRE LA NOUVELLE ROUTE /ai/chart (MODIFIÉE) ---
     const handleGraphicMode = async (userMessage: string) => {
-        const response = await fetch(`${API_BASE_URL}/ai/chart`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", accept: "application/json" },
-            body: JSON.stringify({ query: userMessage }),
-        })
-        
-        if (!response.ok) {
-            setMessages((prev) => [...prev, { role: "bot", content: `Erreur API: statut ${response.status}` }])
-            return
-        }
+        try {
+            const response = await fetch(`${API_BASE_URL}/ai/chart`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", accept: "application/json" },
+                body: JSON.stringify({ query: userMessage }),
+            })
+            
+            if (!response.ok) {
+                setMessages((prev) => [...prev, { role: "bot", content: `Erreur API: statut ${response.status}` }])
+                return
+            }
 
-        const body = (await response.json()) as { analysis: ChartAnalysis; data: ChartData; type: string, query: string }
+            const body = (await response.json()) as { analysis: ChartAnalysis; data: ChartData; type: string, query: string }
 
-        if (body.type === "chart" && body.analysis && body.data) {
-            setMessages((prev) => [
-                ...prev,
-                { role: "bot", content: { type: "chart", payload: { analysis: body.analysis, data: body.data } } },
-            ])
-        } else if (body.type === "error" && body.analysis?.insight) {
-            setMessages((prev) => [...prev, { role: "bot", content: `Erreur de graphique : ${body.analysis.insight}` }])
-        } else {
-            setMessages((prev) => [...prev, { role: "bot", content: "La réponse du graphique était dans un format inattendu." }])
+            if (body.type === "chart" && body.analysis && body.data) {
+                setMessages((prev) => [
+                    ...prev,
+                    { role: "bot", content: { type: "chart", payload: { analysis: body.analysis, data: body.data } } },
+                ])
+            } else if (body.type === "error" && body.analysis?.insight) {
+                setMessages((prev) => [...prev, { role: "bot", content: `Erreur de graphique : ${body.analysis.insight}` }])
+            } else {
+                setMessages((prev) => [...prev, { role: "bot", content: "La réponse du graphique était dans un format inattendu." }])
+            }
+        } catch (error) {
+            console.error("Error calling /ai/chart:", error)
+            throw error 
+        } finally {
+            setIsLoading(false) 
         }
     }
 
@@ -251,13 +257,15 @@ function BotChartMessage({ analysis, data }: { analysis: ChartAnalysis; data: Ch
     const valueFormatter = (value: any) => (typeof value === 'number' ? value.toLocaleString("fr") : value);
 
     // --- CORRECTION DÉFENSIVE (Solution au crash) ---
-    // On s'assure que 'index' et 'categories' ne sont jamais 'undefined'.
-    // Si l'IA oublie de les fournir, on utilise des valeurs par défaut.
-    const indexKey = analysis.index || (data.columns.length > 0 ? data.columns[0] : "");
-    const categoryKeys = analysis.categories || (data.columns.length > 1 ? data.columns.slice(1) : []);
+    // On déduit les clés des colonnes de données, PAS de l'analyse de l'IA.
+    // L'IA est mauvaise à ce jeu, mais les données SQL sont fiables.
+    const indexKey = (data.columns && data.columns.length > 0) ? data.columns[0] : "index";
+    const categoryKeys = (data.columns && data.columns.length > 1) ? data.columns.slice(1) : [];
     
-    // Si on n'a toujours pas de clés valides, on force le mode "list" pour éviter un crash
-    const chartType = (!indexKey || categoryKeys.length === 0) ? "list" : analysis.chart_type;
+    // Si les données sont vides ou que l'IA a dit 'list', on ne dessine pas de graphique.
+    const chartType = (analysis.chart_type === 'list' || !data.rows || data.rows.length === 0) 
+        ? "list" 
+        : analysis.chart_type;
     // --- FIN DE LA CORRECTION ---
 
 
@@ -277,13 +285,13 @@ function BotChartMessage({ analysis, data }: { analysis: ChartAnalysis; data: Ch
                                 height={60} 
                                 interval={0} 
                                 fontSize={10} 
-                                tick={{ fill: 'hsl(var(--foreground))' }} // Gère le mode light/dark
+                                tick={{ fill: 'hsl(var(--foreground))' }} 
                             />
                             <YAxis fontSize={10} tick={{ fill: 'hsl(var(--foreground))' }} />
                             <Tooltip formatter={valueFormatter} wrapperClassName="text-xs !bg-popover !border-border" />
                             <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
                             {categoryKeys.map((category, i) => ( // Tableau sécurisé
-                                <Bar key={category} dataKey={category} fill={COLORS[i % COLORS.length]} />
+                                <Bar key={category} dataKey={category} name={category} fill={COLORS[i % COLORS.length]} />
                             ))}
                         </BarChart>
                     </ResponsiveContainer>
@@ -330,20 +338,15 @@ function BotChartMessage({ analysis, data }: { analysis: ChartAnalysis; data: Ch
                             <Tooltip formatter={valueFormatter} wrapperClassName="text-xs !bg-popover !border-border" />
                             <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
                             {categoryKeys.map((category, i) => ( // Tableau sécurisé
-                                <Line key={category} type="monotone" dataKey={category} stroke={COLORS[i % COLORS.length]} />
+                                <Line key={category} type="monotone" dataKey={category} name={category} stroke={COLORS[i % COLORS.length]} />
                             ))}
                         </LineChart>
                     </ResponsiveContainer>
                 )
             
             default: // "list"
-                return (
-                    <div className="h-48 overflow-y-auto mt-2 p-2 bg-background-inset text-foreground-inset rounded-md"> {/* Couleurs plus adaptées */}
-                        <pre className="text-xs">
-                            {JSON.stringify(data.rows, null, 2)}
-                        </pre>
-                    </div>
-                )
+                // Ne rien afficher si le type est 'list' (données vides)
+                return null;
         }
     }
 
@@ -357,6 +360,7 @@ function BotChartMessage({ analysis, data }: { analysis: ChartAnalysis; data: Ch
 }
 
 // Ajout des styles pour les typing dots
+// (Le reste du code, y compris l'ajout du 'style', est inchangé)
 const style = document.createElement('style');
 style.innerHTML = `
     .typing-dot {
@@ -398,4 +402,8 @@ style.innerHTML = `
         fill: hsl(var(--foreground)) !important;
     }
 `;
-document.head.appendChild(style);
+// S'assurer que le style n'est ajouté qu'une seule fois
+if (!document.getElementById('chatbot-styles')) {
+    style.id = 'chatbot-styles';
+    document.head.appendChild(style);
+}
