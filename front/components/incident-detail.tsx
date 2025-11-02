@@ -162,7 +162,7 @@ export function IncidentDetail({ incident, linkedEmployees, risks, correctiveMea
                                                     </div>
                                                     <div className="flex items-center gap-1 text-sm font-semibold text-primary">
                                                         <DollarSign className="h-4 w-4" />
-                                                        {measure.cost.toLocaleString("en-US", {
+                                                        {(measure.cost ?? 0).toLocaleString("en-US", {
                                                             minimumFractionDigits: 2,
                                                             maximumFractionDigits: 2,
                                                         })}
