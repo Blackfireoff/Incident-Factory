@@ -9,3 +9,4 @@
 env/
 ENV/
 *.log
+.idea

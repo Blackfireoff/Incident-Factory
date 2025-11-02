@@ -3,8 +3,9 @@ import { AlertCircle, AlertTriangle, DollarSign, FileText } from "lucide-react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import IncidentsByTypeDonut, { DonutDatum } from "@/components/IncidentsByTypeDonut"
-import { getTypeColor } from "@/lib/utils"
+import { getTypeColor, getClassificationString } from "@/lib/utils"
 import { ClassificationEvent, Incident, OrganizationalUnit, Person, TypeEvent } from "@/lib/data/incidents-data"
+
 
 const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_URL ?? process.env.API_BASE_URL ?? "http://localhost:8000"
@@ -61,6 +62,7 @@ interface IncidentByClassificationResponse {
 
 interface RecentIncidentCardItem {
     id: number
+    reporter: Person | null
     classification: string
     startDate: Date | null
     type: TypeEvent | null
@@ -116,6 +118,7 @@ export default async function Dashboard() {
     const recentIncidents: RecentIncidentCardItem[] = (recentIncidentsRes?.incidents ?? []).map(
         (incident) => ({
             id: incident.id,
+            reporter: incident.person ?? null,
             classification: incident.classification ?? "Unclassified",
             startDate: incident.start_datetime ? new Date(incident.start_datetime) : null,
             type: parseTypeEvent(incident.type),
@@ -216,9 +219,9 @@ export default async function Dashboard() {
                                         <Link key={incident.id} href={`/incident/${incident.id}`}>
                                             <div className="flex items-start justify-between border-b border-border last:border-0 hover:bg-accent/50 transition-colors rounded-lg p-2 -m-2 cursor-pointer">
                                                 <div className="flex flex-col flex-1 gap-1">
-                                                    <p className="text-sm font-medium text-foreground">#{incident.id}</p>
+                                                    <p className="flex gap-4 text-sm font-medium text-foreground"><span className="font-bold">#{incident.id}</span> {incident.reporter?.name} {incident.reporter?.family_name}</p>
                                                     <Badge variant="secondary" className="bg-primary/10 text-primary">
-                                                        {incident.classification}
+                                                        {getClassificationString(incident.classification)}
                                                     </Badge>
                                                 </div>
                                                 <div className="flex flex-col items-end gap-1">
@@ -256,7 +259,7 @@ export default async function Dashboard() {
                                             className="flex items-center justify-between rounded-lg border bg-card p-4"
                                         >
                                             <span className="text-sm font-medium text-foreground">
-                                                {label}
+                                                {label}<br></br>
                                                 <span className="ml-2 text-xs text-muted-foreground">({location})</span>
                                             </span>
                                             <div className="flex items-center gap-3">
@@ -282,7 +285,7 @@ export default async function Dashboard() {
                 </div>
 
                 <div className="grid gap-6 lg:grid-cols-2 mb-8">
-                    <Card className="gap-2">
+                    <Card>
                         <CardHeader>
                             <CardTitle>Incidents by Type</CardTitle>
                         </CardHeader>
@@ -311,7 +314,7 @@ export default async function Dashboard() {
                                                 key={name}
                                                 className="flex items-center justify-between rounded-lg border bg-card px-4 py-3"
                                             >
-                                                <span className="font-medium text-foreground">{name}</span>
+                                                <span className="font-medium text-foreground">{getClassificationString(name)}</span>
                                                 <span className="text-lg font-semibold text-primary">{value}</span>
                                             </li>
                                         ))}
