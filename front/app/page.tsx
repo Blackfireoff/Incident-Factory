@@ -3,9 +3,41 @@ import { AlertTriangle, FileText, AlertCircle, DollarSign, PieChart, Donut } fro
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 // Corrigé: On importe 'incidents' et les types (pas les listes de données)
-import { incidents, type Risk, type CorrectiveMeasure, TypeEvent } from "@/lib/data/incidents-data"
+import { incidents, type Risk, type CorrectiveMeasure, TypeEvent, Incident, OrganizationalUnit, ClassificationEvent } from "@/lib/data/incidents-data"
 import { getTypeColor } from "@/lib/utils"
 import IncidentsByTypeDonut, { DonutDatum } from "@/components/IncidentsByTypeDonut"
+
+export interface BasicInformation {
+    total_event_count: number,
+    total_critical_risk_count: number,
+    total_no_corrective_measure_count: number,
+    total_corrective_measure_cost: number
+}
+
+export interface MostRecentIncidents {
+    incidents: Incident[]
+}
+
+export interface TopOrganizationCount {
+    top_organization: [
+        organization: OrganizationalUnit,
+        value: number
+    ]
+}
+
+export interface IncidentByType {
+    incidents: [
+        type: TypeEvent,
+        value: number
+    ]
+}
+
+export interface IncidentByClassification {
+    incidents: [
+        type: ClassificationEvent,
+        value: number
+    ]
+}
 
 export default function Dashboard() {
     const totalIncidents = incidents.length
