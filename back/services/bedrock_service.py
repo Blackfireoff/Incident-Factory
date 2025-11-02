@@ -87,7 +87,7 @@ class BedrockService:
         -   Return ONLY the SQL query, with no explanations, comments, or markdown (like ```sql).
         
         --- STRICT RULES ---
-        1.  **One Query:** You MUST generate *one and only one* SELECT query. Do NOT use `WITH ... AS` (Common Table Expressions), do not use semicolons (`;`), and do not write multiple separate `SELECT` statements.
+        1.  **One Query:** You MUST generate *one and only one* SELECT query. Do NOT use `WITH ... AS`, do not use semicolons (`;`), and do not write multiple separate `SELECT` statements.
         
         2.  **"Gravest" interpretation:** To interpret "the gravest" or "most severe", use the `risk.gravity` column (Hints: 'Low', 'Medium', 'High', 'Critical').
             -   *Example logic:* "the most severe" -> `WHERE r.gravity = 'CRITICAL'`
@@ -100,13 +100,20 @@ class BedrockService:
         
         6.  **COUNT Context:** If the question asks for a simple 'COUNT', preserve the context (e.g., `SELECT type, COUNT(*) ... GROUP BY type`).
 
-        7.  **"Declared By" Definition:** A question about who "declared" or "reported" an incident refers to `event.declared_by_id`.
-
-        8.  **[NEW RULE] "Involved" vs. "Declared":** The `event_employee` table lists employees *involved* in the incident (e.g., witness, victim). This is different from `event.declared_by_id` (the reporter).
-            -   *Query "who was involved":* `... JOIN event_employee ee ON e.event_id = ee.event_id JOIN person p ON ee.person_id = p.person_id`
+        7.  **"Reporter" Role:** A question about who "declared," "reported," or is the "reporter" (déclaré, reporté, déclarant) refers EXCLUSIVELY to `event.declared_by_id`.
             -   *Query "who reported":* `... JOIN person p ON e.declared_by_id = p.person_id`
 
-        9.  **[WAS RULE 8] Uppercase Matching:** When filtering text values for the columns `gravity`, `type`, `classification`, `probability`, or `matricule`, you MUST use uppercase.
+        8.  **[UPDATED] "Involved" Roles:** The `event_employee` table lists *specific roles* people played. If the user's query includes any of the following roles, you MUST filter on `event_employee.involvement_type` with an **exact, case-sensitive match (including spaces)**:
+            -   **Role List:** 'Cause', 'Reporter', 'EHS Reporter', 'Workplace Safety Representative', 'Potential Victim', 'Responsible', 'Responder', 'Declared', 'Witness', 'Victim', 'Attendee', 'Supervisor', 'Discoverer', 'Near-Victim', 'Declarer', 'Contributing Factor', 'Director', 'Pedestrian', 'Operator', 'Investigator'
+            -   *Example Query:* "Who was the supervisor for incident 87?"
+            -   *Correct SQL:* `SELECT p.name, p.family_name FROM event_employee ee JOIN person p ON ee.person_id = p.person_id WHERE ee.event_id = 87 AND ee.involvement_type = 'Supervisor'`
+            -   *Example Query:* "Find incidents involving a Workplace Safety Representative"
+            -   *Correct SQL:* `SELECT e.event_id FROM event e JOIN event_employee ee ON e.event_id = ee.event_id WHERE ee.involvement_type = 'Workplace Safety Representative'`
+
+        9.  **[UPDATED] Conceptual Words:** Words like 'Cause' or 'Contributing Factor' ARE in the Role List for `involvement_type`. Use Rule 8.
+
+        10. **[UPDATED] Uppercase Matching:** When filtering text values for the columns `gravity`, `type`, `classification`, `probability`, or `matricule`, you MUST use uppercase.
+            -   This rule does NOT apply to `involvement_type`, which requires a case-sensitive match (Rule 8).
             -   *Correct:* `WHERE classification = 'INJURY'`
             -   *Correct:* `WHERE r.gravity = 'CRITICAL'`
         --- END OF RULES ---
