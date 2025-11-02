@@ -12,7 +12,7 @@ const Link = ({ href, children, ...props }: any) => {
 // +++ NOUVEAU: Arts ASCII aléatoires +++
 const asciiArt = [
     `
-    be happy my friend
+    better luck next time !
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣠⣤⣤⣤⣤⣤⣄⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⢀⣴⣶⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⡴⠶⠛⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠉⠓⠶⢄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⣴⠏⠀⢸⣿⠻⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⡴⠛⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠳⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -47,7 +47,7 @@ const asciiArt = [
 ⣿⣿⣿⣿⣿⣿⣿⡄⠀⢹⣿⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠈⠁⠐⠂⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣤⣼⡿⠋⢀⣾⣇⠈⣿⣏⣻⡟⠉⣿⢋⣿⠛⣷
 `,
     `
-    Tu cherches quoi ici toi ?
+    What are you looking for here ?
 ⣿⣿⣿⣿⣿⣿⣿⣧⣿⣴⣷⣟⠱⠟⡒⠿⠿⠦⢤⣤⡬⠍⠁⠠⠟⣿⣧⣤⣀⣸⣇⡀⠀⢠⣀⠟⠉⠀⠀⠀⠀⠀⠀⢀⣽⣿⣿⣿⣿⣿
 ⡿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡴⢿⣧⣴⡆⣠⠀⠈⠙⣦⡴⠖⠋⠉⠁⠀⠀⠀⠈⠉⠳⢦⣄⠈⠀⠀⠀⠀⠀⣸⠴⠾⠛⠿⣿⣿⣿⣿
 ⡣⣬⣽⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠋⠁⣠⠞⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⣦⢠⣅⣰⣶⠿⣿⣶⡄⢁⣈⢻⣿⣿⣿
@@ -75,7 +75,7 @@ const asciiArt = [
 ⠀⠀⠀⠀⢀⣀⣠⣤⣭⣽⠀⠀⠈⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⣄⣀⣀⣤⣴⣾⣿⣿⣿⡟⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀
 `,
     `
-    Tu n'as trouvé que moi  
+    You found only me ^^
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠟⠛⠛⠛⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⣿⣿⣿⡿⠋⣠⣶⣿⣿⣿⣷⣄⠙⢿⣿⣿⣿⠛⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⠀⠀⠈⠿⡿⠁⣀⣄⡉⠻⣿⣿⠟⠉⢀⣉⠻⠟⠁⠀⣨⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
@@ -103,7 +103,7 @@ const asciiArt = [
 ⣿⣿⣿⣿⣿⣿⣄⣻⣿⣿⣿⡿⠀⣿⡟⢻⣿⣿⣿⠾⣾⢿⣿⡟⣿⣿⣿⣿⣿⣿⣿⣿⡿⠯⢠⣿⣿⣿⣿⡇⢸⣿⣿⣿⣿⣿⣿⡟⢸
 `,
     `
-⠀⠀⠀⠀⠀⠀J'ai pas trouvé la page...⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀I did not found the page...⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⣀⣠⠤⣖⣾⣭⡍⠉⠹⣿⣗⣦⢤⣀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⣠⠶⢶⣶⣿⡿⠋⠉⠀⠀⠀⠀⠀⠀⠀⠙⣿⣿⣾⣕⡦⣄⡀⠀⠀⠀⠀
 ⠀⠈⣧⣧⣉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠀⢹⣿⡿⣿⣿⣷⣯⣳⡀⠀⠀
@@ -143,7 +143,7 @@ export default function NotFound() {
     return (
         // MODIFIÉ: Retour à bg-background et text-foreground
         <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground p-4">
-            <AlertTriangle className="w-24 h-24 text-orange-500 mb-6" />
+            <AlertTriangle className="w-24 h-24 text-primary mb-6" />
 
             {/* +++ NOUVEAU: Affiche l'art ASCII +++ */}
             {/* MODIFIÉ: Ajout de bg-black, rounded-lg, p-4. Changement de couleur de texte. */}
@@ -153,15 +153,15 @@ export default function NotFound() {
             {/* +++ FIN +++ */}
 
             <h1 className="text-6xl font-bold text-primary mb-2">404</h1>
-            <h2 className="text-2xl font-semibold mb-4">Page Introuvable</h2>
+            <h2 className="text-2xl font-semibold mb-4">Page not found</h2>
             {/* MODIFIÉ: Retour à text-muted-foreground */}
             <p className="text-muted-foreground mb-8 text-center max-w-sm">
-                Oups! Il semblerait que la page que vous cherchez se soit cachée ou n'ait jamais existé.
+                Oops! It seems the page you are looking for doesn't exist or isn't implemented yet.
             </p>
             <Link href="/">
                 {/* Le bouton est maintenant un enfant de <a>, ce qui est sémantiquement correct */}
                 <button className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold shadow-md hover:bg-primary/90 transition-colors">
-                    Retourner au Tableau de Bord
+                    Go to Dashboard
                 </button>
             </Link>
         </div>
