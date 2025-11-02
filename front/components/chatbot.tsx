@@ -44,7 +44,7 @@ export function Chatbot() {
                     "Content-Type": "application/json",
                     accept: "application/json",
                 },
-                body: JSON.stringify({ message: userMessage }),
+                body: JSON.stringify({ query: userMessage }),
             })
 
             let answerText = "Je n'ai pas pu obtenir de réponse pour le moment."
@@ -58,8 +58,8 @@ export function Chatbot() {
 
             const body = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null
 
-            if (body && typeof body.answer === "string") {
-                answerText = body.answer
+            if (body && typeof body.response === "string") {
+                answerText = body.response
             } else if (!response.ok && body && typeof body.message === "string") {
                 answerText = `Erreur API: ${body.message}`
             } else if (!response.ok) {
