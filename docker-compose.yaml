@@ -4,17 +4,17 @@ services:
     container_name: postgres_restore
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: events
-      POSTGRES_HOST_AUTH_METHOD: md5
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./events.backup:/backup/events.backup:ro
+      - ./events-bis.backup:/backup/events-bis.backup:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -h localhost -d events"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -h localhost -d ${POSTGRES_DB}"]
       interval: 5s
       retries: 20
 
@@ -24,15 +24,77 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      PGPASSWORD: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - ./events.backup:/backup/events.backup:ro
+      - ./events-bis.backup:/backup/events-bis.backup:ro
     entrypoint: >
       bash -c "
         echo '🚀 Restauration du backup...' &&
-        pg_restore -h postgres -U postgres -d events --verbose /backup/events.backup &&
+        pg_restore -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} --verbose /backup/events-bis.backup &&
         echo '✅ Restauration terminée' || (echo '❌ Échec restore' && exit 1)
       "
 
+
+  opensearch:
+    image: opensearchproject/opensearch:3
+    container_name: opensearch
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
+      - OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+
+
+  backend:
+    build:
+      context: ./back
+      dockerfile: Dockerfile
+    container_name: backend
+    restart: always
+    ports:
+      - "8000:8000"
+    depends_on:
+      - opensearch
+    environment:
+      - OS_HOST=${OS_HOST}
+      - OS_PORT=${OS_PORT}
+      - OS_USER=${OS_USER}
+      - OS_PASSWORD=${OPENSEARCH_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+    volumes:
+      - ./back:/app
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  web:
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+    container_name: next-static-web
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+    depends_on:
+      - backend
+
+
 volumes:
   pgdata:
+  opensearch-data:
+
