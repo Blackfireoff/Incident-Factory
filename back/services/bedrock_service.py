@@ -103,19 +103,21 @@ class BedrockService:
         7.  **"Reporter" Role:** A question about who "declared," "reported," or is the "reporter" (déclaré, reporté, déclarant) refers EXCLUSIVELY to `event.declared_by_id`.
             -   *Query "who reported":* `... JOIN person p ON e.declared_by_id = p.person_id`
 
-        8.  **[UPDATED] "Involved" Roles:** The `event_employee` table lists *specific roles* people played. If the user's query includes any of the following roles, you MUST filter on `event_employee.involvement_type` with an **exact, case-sensitive match (including spaces)**:
+        8.  **"Involved" Roles:** The `event_employee` table lists *specific roles* people played. If the user's query includes any of the following roles, you MUST filter on `event_employee.involvement_type` with an **exact, case-sensitive match (including spaces)**:
             -   **Role List:** 'Cause', 'Reporter', 'EHS Reporter', 'Workplace Safety Representative', 'Potential Victim', 'Responsible', 'Responder', 'Declared', 'Witness', 'Victim', 'Attendee', 'Supervisor', 'Discoverer', 'Near-Victim', 'Declarer', 'Contributing Factor', 'Director', 'Pedestrian', 'Operator', 'Investigator'
             -   *Example Query:* "Who was the supervisor for incident 87?"
             -   *Correct SQL:* `SELECT p.name, p.family_name FROM event_employee ee JOIN person p ON ee.person_id = p.person_id WHERE ee.event_id = 87 AND ee.involvement_type = 'Supervisor'`
-            -   *Example Query:* "Find incidents involving a Workplace Safety Representative"
-            -   *Correct SQL:* `SELECT e.event_id FROM event e JOIN event_employee ee ON e.event_id = ee.event_id WHERE ee.involvement_type = 'Workplace Safety Representative'`
 
-        9.  **[UPDATED] Conceptual Words:** Words like 'Cause' or 'Contributing Factor' ARE in the Role List for `involvement_type`. Use Rule 8.
+        9.  **Conceptual Words:** Words like 'Cause' or 'Contributing Factor' ARE in the Role List for `involvement_type`. Use Rule 8.
 
-        10. **[UPDATED] Uppercase Matching:** When filtering text values for the columns `gravity`, `type`, `classification`, `probability`, or `matricule`, you MUST use uppercase.
+        10. **Uppercase Matching:** When filtering text values for the columns `gravity`, `type`, `classification`, `probability`, or `matricule`, you MUST use uppercase.
             -   This rule does NOT apply to `involvement_type`, which requires a case-sensitive match (Rule 8).
             -   *Correct:* `WHERE classification = 'INJURY'`
             -   *Correct:* `WHERE r.gravity = 'CRITICAL'`
+        
+        11. **[NEW RULE] Total Cost:** The `corrective_measure` table stores repair measures. Each measure has a `cost`. The "total cost of repairs" for an incident is the `SUM(cm.cost)` of all linked `corrective_measure` entries.
+            - *Example Query:* "What is the total cost for incident 83?"
+            - *Correct SQL:* `SELECT SUM(cm.cost) FROM corrective_measure cm JOIN event_corrective_measure ecm ON cm.measure_id = ecm.measure_id WHERE ecm.event_id = 83`
         --- END OF RULES ---
 
         --- SCHEMA ---
