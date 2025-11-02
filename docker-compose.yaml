@@ -51,20 +51,6 @@ services:
     volumes:
       - opensearch-data:/usr/share/opensearch/data
 
-  dashboards:
-    image: opensearchproject/opensearch-dashboards:3
-    container_name: dashboards
-    environment:
-      - OPENSEARCH_HOSTS=["https://opensearch:9200"]
-      - OPENSEARCH_USERNAME=${OPENSEARCH_USERNAME}
-      - OPENSEARCH_PASSWORD=${OPENSEARCH_PASSWORD}
-      - OPENSEARCH_SSL_VERIFICATIONMODE=none
-      - I18N_LOCALE=en
-    ports:
-      - "5601:5601"
-    depends_on:
-      - opensearch
-
 
   backend:
     build:
