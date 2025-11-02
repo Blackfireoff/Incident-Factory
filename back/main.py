@@ -792,7 +792,8 @@ async def get_events(offset: int = 0):
                 p.person_id,
                 p.matricule,
                 p.name,
-                p.family_name
+                p.family_name,
+                p.role
             FROM event e
             LEFT JOIN person p ON e.declared_by_id = p.person_id
             ORDER BY e.event_id
@@ -815,9 +816,11 @@ async def get_events(offset: int = 0):
             # Construire l'objet Person si la personne existe
             if event['person_id']:
                 incident["reporter"] = {
+                    "id": event['person_id'],
                     "matricule": event['matricule'],
                     "name": event['name'],
-                    "family_name": event['family_name']
+                    "family_name": event['family_name'],
+                    "role": event['role']
                 }
             
             incidents.append(incident)
@@ -840,6 +843,256 @@ async def get_events(offset: int = 0):
             }
         )
 
+@app.get("/get_basic_info")
+async def get_basic_info():
+    """Retourne des indicateurs globaux pour le tableau de bord"""
+    try:
+        total_incidents_row = query_db(
+            "SELECT COUNT(*) AS total FROM event;", fetch_one=True
+        )
+        critical_risk_row = query_db(
+            """
+            SELECT COUNT(DISTINCT er.event_id) AS total
+            FROM event_risk er
+            INNER JOIN risk r ON er.risk_id = r.risk_id
+            WHERE r.gravity ILIKE 'critical%';
+            """,
+            fetch_one=True,
+        )
+        no_corrective_row = query_db(
+            """
+            SELECT COUNT(*) AS total
+            FROM event e
+            LEFT JOIN event_corrective_measure ecm ON e.event_id = ecm.event_id
+            WHERE ecm.event_id IS NULL;
+            """,
+            fetch_one=True,
+        )
+        total_cost_row = query_db(
+            """
+            SELECT COALESCE(SUM(cm.cost), 0) AS total_cost
+            FROM event_corrective_measure ecm
+            INNER JOIN corrective_measure cm ON ecm.measure_id = cm.measure_id;
+            """,
+            fetch_one=True,
+        )
+
+        payload = convert_datetime_to_str(
+            {
+                "total_event_count": total_incidents_row["total"] if total_incidents_row else 0,
+                "total_critical_risk_count": critical_risk_row["total"] if critical_risk_row else 0,
+                "total_no_corrective_measure_count": no_corrective_row["total"] if no_corrective_row else 0,
+                "total_corrective_measure_cost": total_cost_row["total_cost"] if total_cost_row else 0,
+            }
+        )
+
+        return JSONResponse({"status": "success", "data": payload})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Erreur lors de la récupération des informations de base: {str(e)}",
+            },
+        )
+
+@app.get("/get_most_recent_incidents")
+async def get_most_recent_incidents(limit: int = 5):
+    """Retourne les incidents les plus récents"""
+    try:
+        if limit <= 0:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "message": "Limit must be a positive integer",
+                },
+            )
+
+        events = query_db(
+            """
+            SELECT
+                e.event_id,
+                e.type,
+                e.classification,
+                e.start_datetime,
+                e.end_datetime,
+                p.person_id,
+                p.matricule,
+                p.name,
+                p.family_name,
+                p.role
+            FROM event e
+            LEFT JOIN person p ON e.declared_by_id = p.person_id
+            ORDER BY e.start_datetime DESC NULLS LAST, e.event_id DESC
+            LIMIT %s;
+            """,
+            params=(limit,),
+        )
+
+        incidents: list[dict] = []
+        for event in events:
+            incident = {
+                "id": event["event_id"],
+                "type": event["type"],
+                "classification": event["classification"],
+                "start_date": event["start_datetime"],
+                "end_date": event["end_datetime"],
+                "reporter": None,
+            }
+
+            if event["person_id"]:
+                incident["reporter"] = {
+                    "id": event["person_id"],
+                    "matricule": event["matricule"],
+                    "name": event["name"],
+                    "family_name": event["family_name"],
+                    "role": event["role"],
+                }
+
+            incidents.append(incident)
+
+        payload = convert_datetime_to_str(incidents)
+        return JSONResponse({"incidents": payload})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Erreur lors de la récupération des incidents récents: {str(e)}",
+            },
+        )
+
+@app.get("/get_top_organization")
+async def get_top_organization(limit: int = 5):
+    """Retourne les unités organisationnelles avec le plus d'incidents"""
+    try:
+        if limit <= 0:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "message": "Limit must be a positive integer",
+                },
+            )
+
+        rows = query_db(
+            """
+            SELECT
+                ou.unit_id,
+                ou.identifier,
+                ou.name,
+                ou.location,
+                COUNT(*) AS total
+            FROM event e
+            INNER JOIN organizational_unit ou ON e.organizational_unit_id = ou.unit_id
+            GROUP BY ou.unit_id, ou.identifier, ou.name, ou.location
+            ORDER BY total DESC, ou.unit_id ASC
+            LIMIT %s;
+            """,
+            params=(limit,),
+        )
+
+        top_entries = [
+            {
+                "organization": {
+                    "id": row["unit_id"],
+                    "identifier": row["identifier"],
+                    "name": row["name"],
+                    "location": row["location"],
+                },
+                "value": row["total"],
+            }
+            for row in rows
+        ]
+
+        return JSONResponse({"top_organization": top_entries})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Erreur lors de la récupération des organisations principales: {str(e)}",
+            },
+        )
+
+@app.get("/get_incident_by_type")
+async def get_incident_by_type():
+    """Retourne le nombre total d'incidents par type"""
+    try:
+        rows = query_db(
+            """
+            SELECT
+                e.type,
+                COUNT(*) AS total
+            FROM event e
+            GROUP BY e.type
+            ORDER BY total DESC, e.type ASC;
+            """
+        )
+
+        payload = [
+            {
+                "type": row["type"],
+                "value": row["total"],
+            }
+            for row in rows
+        ]
+
+        return JSONResponse({"incidents_by_type": payload})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Erreur lors de la récupération des incidents par type: {str(e)}",
+            },
+        )
+
+@app.get("/get_incident_by_classification")
+async def get_incident_by_classification(limit: int = 5):
+    """Retourne le nombre total d'incidents par classification (max 5)"""
+    try:
+        if limit <= 0:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "message": "Limit must be a positive integer",
+                },
+            )
+
+        rows = query_db(
+            """
+            SELECT
+                e.classification,
+                COUNT(*) AS total
+            FROM event e
+            GROUP BY e.classification
+            ORDER BY total DESC, e.classification ASC
+            LIMIT %s;
+            """,
+            params=(limit,),
+        )
+
+        payload = [
+            {
+                "type": row["classification"],
+                "value": row["total"],
+            }
+            for row in rows
+        ]
+
+        return JSONResponse({"incidents": payload})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Erreur lors de la récupération des incidents par classification: {str(e)}",
+            },
+        )
+
 @app.get("/{event_id}/details")
 async def get_event_details(event_id: int):
     """Route pour récupérer tous les détails d'un événement"""
@@ -855,7 +1108,8 @@ async def get_event_details(event_id: int):
                 e.classification,
                 p.matricule,
                 p.name,
-                p.family_name
+                p.family_name,
+                p.person_id
             FROM event e
             INNER JOIN person p ON e.declared_by_id = p.person_id
             WHERE e.event_id = %s;
@@ -886,7 +1140,9 @@ async def get_event_details(event_id: int):
         organizational_unit = query_db("""
             SELECT 
                 ou.identifier,
-                ou.name
+                ou.name, 
+                ou.location, 
+                ou.unit_id
             FROM event e
             INNER JOIN organizational_unit ou ON e.organizational_unit_id = ou.unit_id
             WHERE e.event_id = %s;
@@ -895,6 +1151,7 @@ async def get_event_details(event_id: int):
         # Récupérer les mesures correctives avec inner join corrective_measure et person
         corrective_measures = query_db("""
             SELECT 
+                cm.measure_id,
                 cm.name,
                 cm.implementation_date AS implementation,
                 cm.description,
@@ -912,6 +1169,7 @@ async def get_event_details(event_id: int):
         # Récupérer les risques avec inner join risk
         risks = query_db("""
             SELECT 
+                r.risk_id,
                 r.name,
                 r.gravity,
                 r.probability
@@ -920,22 +1178,35 @@ async def get_event_details(event_id: int):
             WHERE er.event_id = %s;
         """, params=(event_id,))
         
+        risks_payload = None
+        if risks:
+            risks_payload = [
+                {
+                    "id": r['risk_id'],
+                    "name": r['name'],
+                    "gravity": r['gravity'],
+                    "probability": r['probability']
+                }
+                for r in risks
+            ]
+        
         # Construire la réponse selon la structure demandée
         result = {
-            "event_id": event['event_id'],
+            "id": event['event_id'],
             "description": event['description'],
             "start_datetime": event['start_datetime'],
             "end_datetime": event['end_datetime'],
             "type": event['type'],
             "classification": event['classification'],
             "person": {
+                "id": event['person_id'],
                 "matricule": event['matricule'],
                 "name": event['name'],
                 "family_name": event['family_name']
             },
             "employees": [
                 {
-                    "person_id": emp['person_id'],
+                    "id": emp['person_id'],
                     "matricule": emp['matricule'],
                     "name": emp['name'],
                     "family_name": emp['family_name']
@@ -943,17 +1214,20 @@ async def get_event_details(event_id: int):
                 for emp in (employees if employees else [])
             ],
             "organizational_unit": {
+                "id": organizational_unit['unit_id'] if organizational_unit else None,
                 "identifier": organizational_unit['identifier'] if organizational_unit else None,
-                "name": organizational_unit['name'] if organizational_unit else None
+                "name": organizational_unit['name'] if organizational_unit else None,
+                "location": organizational_unit['location'] if organizational_unit else None,
             } if organizational_unit else None,
             "corrective_measures": [
                 {
+                    "id": cm['measure_id'],
                     "name": cm['name'],
                     "implementation": cm['implementation'],
                     "description": cm['description'],
                     "cost": cm['cost'],
-                    "owner_id": cm['owner_id'],
                     "owner": {
+                        "id": cm['owner_id'],
                         "matricule": cm['owner_matricule'],
                         "name": cm['owner_name'],
                         "family_name": cm['owner_family_name']
@@ -961,14 +1235,7 @@ async def get_event_details(event_id: int):
                 }
                 for cm in (corrective_measures if corrective_measures else [])
             ],
-            "risks": [
-                {
-                    "name": r['name'],
-                    "gravity": r['gravity'],
-                    "probability": r['probability']
-                }
-                for r in (risks if risks else [])
-            ]
+            "risks": risks_payload
         }
         
         # Convertir les datetime en strings pour la sérialisation JSON
