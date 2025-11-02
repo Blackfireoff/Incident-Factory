@@ -195,7 +195,7 @@ export function IncidentsTable({ totalCount: initialCount }: IncidentsTableProps
                                             onClick={() => router.push(`/incident/${incident.id}`)}
                                         >
                                             {/* Corrigé: .id est un nombre, .slice() est supprimé */}
-                                            <TableCell className="font-mono text-xs">{incident.id}</TableCell>
+                                            <TableCell className="text-xs">{incident.id}</TableCell>
 
                                             {/* Corrigé: Affiche le nom et le matricule du reporter */}
                                             <TableCell>
