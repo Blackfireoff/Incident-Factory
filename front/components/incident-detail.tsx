@@ -35,18 +35,6 @@ export function IncidentDetail({ incident, linkedEmployees, risks, correctiveMea
         }
     }
 
-    const getRoleColor = (involvement_type: string) => {
-        switch (involvement_type.toLowerCase()) {
-            case "victim":
-                return "bg-red-100 text-red-800 border-red-300"
-            case "responder":
-                return "bg-blue-100 text-blue-800 border-blue-300"
-            case "witness":
-                return "bg-purple-100 text-purple-800 border-purple-300"
-            default:
-                return "bg-gray-100 text-gray-800 border-gray-300"
-        }
-    }
 
     const totalCost = correctiveMeasures.reduce((sum, measure) => sum + measure.cost, 0)
 
@@ -222,7 +210,7 @@ export function IncidentDetail({ incident, linkedEmployees, risks, correctiveMea
                                                 <div className="font-semibold text-foreground">
                                                     {employee.linked_person.name} {employee.linked_person.family_name}
                                                 </div>
-                                                <Badge variant="outline" className={getRoleColor(employee.involvement_type)}>
+                                                <Badge variant="outline"  className="bg-blue-100 text-blue-800 border-blue-300">
                                                     {employee.involvement_type.charAt(0).toUpperCase() + employee.involvement_type.slice(1)}
                                                 </Badge>
 
