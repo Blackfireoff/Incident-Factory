@@ -29,6 +29,7 @@ interface Filters {
     employeeMatricule: string
     type: string
     classification: string
+    gravity: string
     startDate: Date | undefined
     endDate: Date | undefined
     startMonth: Date | undefined
@@ -53,6 +54,7 @@ const createInitialFilters = (): Filters => ({
     employeeMatricule: "",
     type: "",
     classification: "",
+    gravity:"",
     startDate: undefined,
     endDate: undefined,
     startMonth: undefined,
@@ -96,6 +98,7 @@ export function AdvancedFilters({ filters, onFilterChange, onApplyFilters, isApp
             employeeMatricule: "",
             type: "",
             classification: "",
+            gravity: "",
             startDate: undefined,
             endDate: undefined,
             startMonth: undefined,
@@ -179,6 +182,7 @@ export function AdvancedFilters({ filters, onFilterChange, onApplyFilters, isApp
                         </SelectContent>
                     </Select>
                 </div>
+
 
                 {/* Start Date */}
                 <div className="space-y-2">
