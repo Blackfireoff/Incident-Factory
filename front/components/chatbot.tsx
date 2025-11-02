@@ -84,6 +84,7 @@ export function Chatbot() {
     }
 
     const handleQueryMode = async (userMessage: string) => {
+        setIsLoading(true)
         try {
             const response = await fetch(`${API_BASE_URL}/ai/query`, {
                 method: "POST",
@@ -108,6 +109,7 @@ export function Chatbot() {
     }
 
     const handleGraphicMode = async (userMessage: string) => {
+        setIsLoading(true)
         try {
             const response = await fetch(`${API_BASE_URL}/ai/chart`, {
                 method: "POST",
@@ -359,51 +361,3 @@ function BotChartMessage({ analysis, data }: { analysis: ChartAnalysis; data: Ch
     )
 }
 
-// Ajout des styles pour les typing dots
-// (Le reste du code, y compris l'ajout du 'style', est inchangé)
-const style = document.createElement('style');
-style.innerHTML = `
-    .typing-dot {
-        width: 6px;
-        height: 6px;
-        background-color: hsl(var(--muted-foreground));
-        border-radius: 50%;
-        display: inline-block;
-        animation: typing 1s infinite;
-    }
-    .typing-dot:nth-child(2) {
-        animation-delay: 0.15s;
-    }
-    .typing-dot:nth-child(3) {
-        animation-delay: 0.3s;
-    }
-    @keyframes typing {
-        0%, 80%, 100% {
-            transform: scale(0);
-        }
-        40% {
-            transform: scale(1.0);
-        }
-    }
-    .bg-background-inset {
-        background-color: #f1f5f9; /* Valeur par défaut pour light mode */
-    }
-    .text-foreground-inset {
-        color: #020817; /* Valeur par défaut pour light mode */
-    }
-    html.dark .bg-background-inset {
-        background-color: #020817; /* Mode dark */
-    }
-    html.dark .text-foreground-inset {
-        color: #f8fafc; /* Mode dark */
-    }
-    /* Gère la couleur de remplissage des ticks recharts */
-    .recharts-cartesian-axis-tick-value {
-        fill: hsl(var(--foreground)) !important;
-    }
-`;
-// S'assurer que le style n'est ajouté qu'une seule fois
-if (!document.getElementById('chatbot-styles')) {
-    style.id = 'chatbot-styles';
-    document.head.appendChild(style);
-}
