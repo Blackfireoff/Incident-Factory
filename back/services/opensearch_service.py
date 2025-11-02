@@ -116,8 +116,8 @@ def create_index_mapping(index_name: str):
                 "involved_employees": {
                     "type": "nested",
                     "properties": {
-                        "name": {"type": "text"},
-                        "family_name": {"type": "text"},
+                        "name": {"type": "text"}, # Doit être 'text' pour la recherche floue
+                        "family_name": {"type": "text"}, # Doit être 'text'
                         "involvement_type": {"type": "keyword"}
                     }
                 }
@@ -125,6 +125,7 @@ def create_index_mapping(index_name: str):
         }
     }
 
+# --- FONCTION ensure_index (INCHANGÉE) ---
 def ensure_index(client: OpenSearch, index_name: str):
     """
     S'assure que l'index existe avec le bon mapping (utilisé par main.py).
@@ -140,13 +141,8 @@ def ensure_index(client: OpenSearch, index_name: str):
             raise
     else:
         print(f"L'index '{index_name}' existe déjà.")
-        # Optionnel: Mettre à jour le mapping si nécessaire
-        # try:
-        #     client.indices.put_mapping(index=index_name, body=create_index_mapping(index_name)["mappings"])
-        # except Exception as e:
-        #     print(f"Avertissement: Échec de la mise à jour du mapping. {e}")
 
-
+# --- FONCTION index_incident (INCHANGÉE) ---
 def index_incident(client: OpenSearch, index_name: str, doc_id: int, doc_body: dict):
     """Indexe un document (incident) dans OpenSearch (utilisé par main.py et enhanced_indexing.py)."""
     try:
@@ -154,34 +150,97 @@ def index_incident(client: OpenSearch, index_name: str, doc_id: int, doc_body: d
             index=index_name,
             id=doc_id,
             body=doc_body,
-            refresh=False # Mettre à 'wait_for' pour des tests, False pour la performance
+            refresh=False 
         )
     except Exception as e:
         print(f"Erreur lors de l'indexation du doc {doc_id}: {e}")
 
+# --- FONCTION search_semantic_incidents (REMPLACÉE) ---
 def search_semantic_incidents(
     client: OpenSearch,
     index_name: str,
     query_text: str,
-    size: int = 3 # 3 hits de contexte est souvent suffisant
+    size: int = 3
 ) -> Dict[str, Any]:
     """
     Exécute la recherche sémantique/textuelle pour le RAG.
-    Cible le champ 'full_text_search'.
+    CORRIGÉE pour inclure les employés et améliorer la recherche de mots-clés.
     """
+    
+    # 1. Recherche de texte principale (pour les descriptions, noms, etc.)
+    base_match = {
+        "simple_query_string": {
+            "query": query_text,
+            "fields": [
+                "full_text_search^5", 
+                "description^3", 
+                "risks.name^2", 
+                "corrective_measures.name^2",
+                "involved_employees.name", 
+                "involved_employees.family_name"
+            ],
+            # --- CORRECTION : Le "AND" était trop strict ---
+            "default_operator": "OR" 
+        }
+    }
+    
+    # 2. Recherche de mot-clé (pour "INJURY", "NEAR_MISS", etc.)
+    keyword_match = {
+        "multi_match": {
+            "query": query_text,
+            "fields": ["type^5", "classification^5"],
+            "type": "best_fields", 
+            "fuzziness": "AUTO"
+        }
+    }
+    
+    # 3. Requêtes imbriquées (Nested)
+    risks_nested = {
+        "nested": {
+            "path": "risks",
+            "query": { "match": { "risks.name": {"query": query_text, "fuzziness": "AUTO"} } }
+        }
+    }
+    
+    measures_nested = {
+        "nested": {
+            "path": "corrective_measures",
+            "query": { "match": { "corrective_measures.name": {"query": query_text, "fuzziness": "AUTO"} } }
+        }
+    }
+
+    employees_nested = {
+        "nested": {
+            "path": "involved_employees",
+            "query": {
+                "multi_match": {
+                    "query": query_text,
+                    "fields": ["involved_employees.name", "involved_employees.family_name"],
+                    "fuzziness": "AUTO"
+                }
+            }
+        }
+    }
+
+    # Combinaison : Doit correspondre à l'un de ces blocs
     search_body = {
         "size": size,
         "query": {
-            "multi_match": {
-                "query": query_text,
-                "fields": ["full_text_search^3", "description^2", "risks.name", "corrective_measures.name"],
-                "type": "best_fields",
-                "fuzziness": "AUTO"
+            "bool": {
+                "should": [
+                    base_match,
+                    keyword_match,
+                    risks_nested,
+                    measures_nested,
+                    employees_nested
+                ],
+                "minimum_should_match": 1 
             }
         },
         "highlight": {
             "fields": {
-                "full_text_search": {}
+                "full_text_search": {},
+                "description": {}
             },
             "fragment_size": 150,
             "number_of_fragments": 3
@@ -189,10 +248,11 @@ def search_semantic_incidents(
     }
 
     try:
+        print(f"Exécution de la recherche RAG (Corrigée v2) pour: '{query_text}'")
         return client.search(index=index_name, body=search_body)
     except NotFoundError:
         print(f"Erreur: Index '{index_name}' non trouvé lors de la recherche.")
         return {"hits": {"hits": [], "total": {"value": 0}}}
     except Exception as e:
         print(f"Erreur lors de la recherche OpenSearch: {e}")
-        raise
+        return {"hits": {"hits": [], "total": {"value": 0}}}

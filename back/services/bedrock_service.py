@@ -18,11 +18,11 @@ class BedrockService:
                 region_name=region_name
             )
         except Exception as e:
-            print("Erreur: Impossible d'initialiser le client Boto3 Bedrock.")
-            raise Exception(f"Erreur client Bedrock: {e}")
+            print("Error: Could not initialize Boto3 Bedrock client.")
+            raise Exception(f"Bedrock client error: {e}")
 
     def _call_bedrock(self, system_prompt: str, user_content: str, temperature: float = 0.0, max_tokens: int = 2048) -> str:
-        """Fonction helper pour appeler l'API Bedrock converse."""
+        """Helper function to call the Bedrock converse API."""
         try:
             response = self.bedrock.converse(
                 modelId=MODEL_ID,
@@ -41,29 +41,29 @@ class BedrockService:
             return response["output"]["message"]["content"][0]["text"]
 
         except Exception as e:
-            print(f"Erreur lors de l'appel à Bedrock (converse): {e}")
+            print(f"Error during Bedrock call (converse): {e}")
             if "AccessDeniedException" in str(e):
-                print(f"Erreur: Accès refusé. Avez-vous demandé l'accès au modèle '{MODEL_ID}' dans la console Bedrock ?")
+                print(f"Error: Access denied. Have you requested access to model '{MODEL_ID}' in the Bedrock console?")
             raise e 
 
     def decide_tool(self, user_query: str) -> Literal["sql", "search"]:
         """
-        Décide quel outil utiliser (SQL ou RAG/Recherche sémantique).
+        Decides which tool to use (SQL or RAG/Semantic Search).
         """
         system_prompt = f"""
-        Tu es un agent de routage intelligent. Ton but est de décider quel outil utiliser pour répondre à la question de l'utilisateur.
-        Tu as deux choix :
-        1.  "sql": Utilise cet outil pour les questions nécessitant de compter, lister, agréger, ou filtrer des données structurées (ex: "Combien...", "Liste tous les incidents à...", "Donne-moi le top 5...", "Génère un graphique...").
-        2.  "search": Utilise cet outil pour les questions ouvertes, sémantiques, ou de raisonnement (ex: "Pourquoi...", "Comment prévenir...", "Que s'est-il passé...", "Quels incidents impliquent des escaliers...").
+        You are an intelligent routing agent. Your purpose is to decide which tool to use to answer the user's question.
+        You have two choices:
+        1.  "sql": Use this tool for questions requiring counting, listing, aggregating, or filtering structured data (e.g., "How many...", "List all incidents at...", "Give me the top 5...", "Generate a graph...").
+        2.  "search": Use this tool for open-ended, semantic, or reasoning questions (e.g., "Why...", "How to prevent...", "What happened...", "What incidents involve stairs...").
 
-        Exemples de routage :
+        Routing Examples:
         -   Question: "Affiche tous les événements du dernier mois en Abitibi" -> "sql"
         -   Question: "Quels événements impliquent des escaliers par temps froid?" -> "search"
         -   Question: "Liste toutes les blessures qui auraient pu être évitées avec un casque" -> "search"
         -   Question: "Quels types de machines sont impliquées dans le plus de blessures ?" -> "sql"
         -   Question: "Propose un plan d'action pour réduire la gravité..." -> "search"
 
-        Réponds UNIQUEMENT par "sql" ou "search". Ne dis rien d'autre.
+        Respond ONLY with "sql" or "search". Do not say anything else.
         """
         
         response = self._call_bedrock(
@@ -77,34 +77,43 @@ class BedrockService:
             return "sql"
         return "search"
 
-    # --- FONCTION generate_sql_query (PROMPT MIS À JOUR) ---
+    # --- FUNCTION generate_sql_query (PROMPT UPDATED) ---
     def generate_sql_query(self, schema: str, user_query: str) -> str:
         """
-        Génère une requête SQL à partir de la question de l'utilisateur et du schéma.
+        Generates a SQL query from the user's question and the schema.
         """
         system_prompt = f"""
-        Tu es un expert en PostgreSQL. Étant donné le schéma de base de données ci-dessous, écris une seule requête SELECT, efficace et lisible, pour répondre à la question de l'utilisateur.
-        -   Ne retourne QUE la requête SQL, sans aucune explication, commentaire ou balise (comme ```sql).
+        You are a PostgreSQL expert. Given the database schema below, write a single, efficient, and readable SELECT query to answer the user's question.
+        -   Return ONLY the SQL query, with no explanations, comments, or markdown (like ```sql).
         
-        --- RÈGLES STRICTES ---
-        1.  **[NOUVEAU] Une Seule Requête :** Tu DOIS générer *une seule et unique* requête SELECT. N'utilise PAS de `WITH ... AS` (Common Table Expressions), n'utilise pas de point-virgule (`;`), et n'écris pas plusieurs `SELECT` séparés.
+        --- STRICT RULES ---
+        1.  **One Query:** You MUST generate *one and only one* SELECT query. Do NOT use `WITH ... AS` (Common Table Expressions), do not use semicolons (`;`), and do not write multiple separate `SELECT` statements.
         
-        2.  **[NOUVEAU] Simplifier la "Gravité" :** La notion "le plus grave" est subjective. Interprète "les 100 incidents les plus graves" en te basant sur la colonne `risk.gravity`.
-            -   *Bon SQL :* `... JOIN risk r ON ... WHERE r.gravity = 'Critical' ORDER BY e.start_datetime DESC LIMIT 100`
-            -   *Mauvais SQL (interdit) :* `... ORDER BY e.classification = 'INJURY' ...` (C'est trop complexe).
+        2.  **"Gravest" interpretation:** To interpret "the gravest" or "most severe", use the `risk.gravity` column (Hints: 'Low', 'Medium', 'High', 'Critical').
+            -   *Example logic:* "the most severe" -> `WHERE r.gravity = 'CRITICAL'`
 
-        3.  **Obéissance aux indices :** Les 'Indices de valeurs' (ex: 'INJURY') SONT la seule source de vérité. TU DOIS les utiliser.
+        3.  **Obey Hints:** The 'Value Hints' (e.g., 'INJURY') ARE the single source of truth. You MUST use them.
         
-        4.  **Utilisation des IDs :** Si la question de l'utilisateur mentionne un ID spécifique (ex: "incident 83"), tu DOIS utiliser cet ID. N'AJOUTE PAS d'autres filtres textuels (comme `description = '...'`). L'ID est suffisant et prioritaire.
+        4.  **Use IDs:** If the user's question mentions a specific ID (e.g., "incident 83"), you MUST use that numeric ID in your `WHERE` clause. Do NOT add other text filters. The ID is sufficient and takes priority.
         
-        5.  **Respect des jointures :** Tu NE DOIS PAS inventer de colonnes. Pour lier `event` et `corrective_measure`, tu DOIS utiliser `event_corrective_measure`.
+        5.  **Respect Joins:** You MUST NOT invent columns. To link `event` and `corrective_measure`, you MUST use the `event_corrective_measure` junction table.
         
-        6.  **Contexte des COUNT :** Si la question demande un simple 'COUNT', préserve le contexte (ex: `SELECT type, COUNT(*) ... GROUP BY type`).
-        --- FIN DES RÈGLES ---
+        6.  **COUNT Context:** If the question asks for a simple 'COUNT', preserve the context (e.g., `SELECT type, COUNT(*) ... GROUP BY type`).
 
-        --- SCHÉMA ---
+        7.  **"Declared By" Definition:** A question about who "declared" or "reported" an incident refers to `event.declared_by_id`.
+
+        8.  **[NEW RULE] "Involved" vs. "Declared":** The `event_employee` table lists employees *involved* in the incident (e.g., witness, victim). This is different from `event.declared_by_id` (the reporter).
+            -   *Query "who was involved":* `... JOIN event_employee ee ON e.event_id = ee.event_id JOIN person p ON ee.person_id = p.person_id`
+            -   *Query "who reported":* `... JOIN person p ON e.declared_by_id = p.person_id`
+
+        9.  **[WAS RULE 8] Uppercase Matching:** When filtering text values for the columns `gravity`, `type`, `classification`, `probability`, or `matricule`, you MUST use uppercase.
+            -   *Correct:* `WHERE classification = 'INJURY'`
+            -   *Correct:* `WHERE r.gravity = 'CRITICAL'`
+        --- END OF RULES ---
+
+        --- SCHEMA ---
         {schema}
-        --- FIN SCHÉMA ---
+        --- END SCHEMA ---
         """
         
         response = self._call_bedrock(
@@ -131,54 +140,54 @@ class BedrockService:
     # --- FONCTION generate_rag_response (Refonte Totale du Prompt) ---
     def generate_rag_response(self, context: str, user_query: str) -> str:
         """
-        Génère une réponse en langage naturel basée sur un contexte (RAG ou SQL).
+        Generates a natural language response based on a context (RAG or SQL).
         """
         
         base_prompt = """
-        Tu es un assistant IA expert en analyse d'incidents de sécurité et d'environnement.
-        Ton objectif est de répondre à la question de l'utilisateur en te basant sur les faits du contexte fourni.
-        Tu ne dois **JAMAIS** mentionner que tu te bases sur un "contexte" ou "les informations fournies". Réponds directement.
+        You are an expert AI assistant for analyzing safety and environmental incidents.
+        Your goal is to answer the user's question based on the facts in the provided context.
+        You MUST **NEVER** mention that you are basing your answer on "the context" or "the provided information." Answer directly.
 
-        --- DÉBUT DE LA LOGIQUE DE DÉCISION ---
+        --- START DECISION LOGIC ---
 
-        **CAS 1 : Le contexte est du TEXTE (Résultat de recherche RAG)**
-        Tu dois te baser STRICTEMENT sur les faits du texte.
-        - **Règle de Raisonnement :** Si un fait (ex: blessure à la main) n'a aucun lien logique avec la question (ex: casque), dis-le. NE PAS HALLUCINER de lien (ex: "le casque aurait protégé son visage").
-        - **Règle d'échec RAG :** Si le texte ne contient aucune information pertinente (Test 7), réponds : "Je n'ai pas trouvé d'informations pertinentes dans les documents pour répondre à cette question."
+        **CASE 1: Context is TEXT (RAG Result)**
+        You must base your answer STRICTLY on the facts in the text.
+        - **Reasoning Rule:** If a fact (e.g., hand injury) has no logical connection to the question (e.g., helmet), state that. DO NOT HALLUCINATE a connection.
+        - **RAG Fail Rule:** If the context is "No context found.", respond: "I did not find relevant information in the documents to answer this question."
 
-        **CAS 2 : Le contexte est du JSON (Résultat de SQL)**
-        Tu dois suivre cette hiérarchie de règles :
+        **CASE 2: Context is JSON (SQL Result)**
+        You must follow this hierarchy of rules:
 
-        **Règle 2.1 (Erreur SQL) :**
-        - Si le contexte contient `"Erreur":` (ex: `[{"Erreur": "..."}]`).
-        - *Action :* Réponds : "Je n'ai pas pu formuler de réponse précise pour cette demande de données car une erreur est survenue."
+        **Rule 2.1 (SQL Error):**
+        - If the context contains `"Error":` (e.g., `[{"Error": "..."}]`).
+        - *Action:* Respond: "I could not formulate a precise answer for this data request because an error occurred."
 
-        **Règle 2.2 (Résultat Vide) :**
-        - Si le contexte est une liste vide (`[]`).
-        - *Action :* Réponds qu'aucun résultat n'a été trouvé.
-        - *Exemple :* "Aucun événement n'a été trouvé en Abitibi durant le dernier mois."
+        **Rule 2.2 (Empty Result):**
+        - If the context is an empty list (`[]`).
+        - *Action:* Respond that no results were found.
+        - *Example:* "No events were found in Abitibi during the last month."
 
-        **Règle 2.3 (Résultat Null) :**
-        - Si le contexte est `[{"sum": null}]` ou `[{"avg": null}]`.
-        - *Action :* Traite `null` comme `0`.
-        - *Exemple :* "Le coût total est de 0 $."
+        **Rule 2.3 (Null Result):**
+        - If the context is `[{"sum": null}]` or `[{"avg": null}]`.
+        - *Action:* Treat `null` as `0`.
+        - *Example:* "The total cost is $0."
 
-        **Règle 2.4 (Résultat de Données - Le Cas Général) :**
-        - Si le contexte est N'IMPORTE QUEL AUTRE JSON (ex: `[{"sum": 12700}]`, `[{"event_id": 426}, ...]`, `[{"avg": 26332}]`, etc.)
-        - *Action :* Tu DOIS le considérer comme une réussite. Ta seule tâche est de synthétiser ces données en une phrase ou une liste claire. NE PAS DÉCLENCHER D'ERREUR.
-        - *Exemple (Contexte: `[{"sum": 12700}]`) ->* "Le coût total est de 12 700 $."
-        - *Exemple (Contexte: `[{"event_id": 426}, {"event_id": 590}, ...]`) ->* "J'ai trouvé plusieurs incidents impliquant Alain Mercier, notamment les incidents 426, 590, 615, et d'autres."
-        - *Exemple (Contexte: `[{"description": "...", "count": 2}]`) ->* "L'incident 80 a eu 2 mesures correctives."
+        **Rule 2.4 (Data Result - The Default Case):**
+        - If the context is ANY OTHER JSON (e.g., `[{"sum": 12700}]`, `[{"event_id": 426}, ...]`, `[{"avg": 26332}]`, etc.)
+        - *Action:* You MUST treat it as a success. Your only task is to synthesize this data into a clear sentence or bulleted list. DO NOT trigger an error.
+        - *Example (Context: `[{"sum": 12700}]`) ->* "The total cost is $12,700."
+        - *Example (Context: `[{"event_id": 426}, {"event_id": 590}, ...]`) ->* "I found several incidents involving Alain Mercier, including incidents 426, 590, 615, and others."
+        - *Example (Context: `[{"description": "...", "count": 2}]`) ->* "Incident 80 had 2 corrective measures."
 
-        --- FIN DE LA LOGIQUE ---
+        --- END OF LOGIC ---
 
-        **RAPPEL FINAL :** Ne parle jamais du "contexte".
+        **FINAL REMINDER:** Never mention "the context".
 
-        --- CONTEXTE ---
+        --- CONTEXT ---
         """
         
         # Concaténation sécurisée
-        system_prompt = base_prompt + context + "\n--- FIN DU CONTEXTE ---"
+        system_prompt = base_prompt + context + "\n--- END CONTEXT ---"
         
         return self._call_bedrock(
             system_prompt=system_prompt, 
@@ -189,34 +198,35 @@ class BedrockService:
 
     def generate_chart_analysis(self, user_query: str, sql_data_json: str, columns: List[str]) -> Dict[str, Any]:
         """
-        Analyse les données SQL et la requête pour suggérer un graphique.
-        Ne renvoie PAS l'index ou les catégories, car le frontend les déduira.
+        Analyzes SQL data and the query to suggest a chart.
         """
         
         system_prompt = f"""
-        Tu es un analyste de données expert. L'utilisateur t'a posé une question et tu as les données SQL suivantes en format JSON pour y répondre.
-        Ta tâche est de renvoyer un objet JSON (et RIEN D'AUTRE) qui analyse ces données.
+        You are an expert data analyst. The user asked a question, and you have the following SQL data in JSON format to answer it.
+        Your task is to return a JSON object (and NOTHING ELSE) that analyzes this data for a chart.
 
-        --- RÈGLES DE LOGIQUE ---
-        1.  **Si les données sont `[]` (liste vide) :**
-            - `chart_type` DOIT être "list".
-            - `title` DOIT être un titre approprié (ex: "Aucun Résultat").
-            - `insight` DOIT expliquer qu'aucune donnée n'a été trouvée (ex: "Aucune donnée disponible pour cette requête.").
+        Available columns are: {columns}
         
-        2.  **Si les données sont pleines :**
-            - Suggère "bar", "pie", ou "line" en fonction des colonnes : {columns}.
-            - Rédige un `title` et un `insight`.
+        --- LOGIC RULES ---
+        1.  **If data is `[]` (empty list):**
+            - `chart_type` MUST be "list".
+            - `title` MUST be an appropriate title (e.g., "No Results").
+            - `insight` MUST explain that no data was found (e.g., "No data available for this query.").
+        
+        2.  **If data is full:**
+            - Suggest "bar", "pie", or "line" based on the columns: {columns}.
+            - Write a `title` and an `insight`.
 
-        Format de sortie OBLIGATOIRE (JSON uniquement) :
+        REQUIRED output format (JSON only):
         {{
           "chart_type": "bar" | "pie" | "line" | "list",
-          "title": "Titre du graphique",
-          "insight": "Une brève analyse de ce que les données montrent."
+          "title": "Chart Title",
+          "insight": "A brief analysis of what the data shows."
         }}
         
-        --- DONNÉES SQL (JSON) ---
+        --- SQL DATA (JSON) ---
         {sql_data_json}
-        --- FIN DES DONNÉES ---
+        --- END SQL DATA ---
         """
         
         response_text = self._call_bedrock(
@@ -233,7 +243,7 @@ class BedrockService:
                 return json.loads(json_match.group(0))
             else:
                 # Fallback
-                return {"chart_type": "list", "title": "Données Brutes", "insight": "L'analyse IA a échoué."}
+                return {"chart_type": "list", "title": "Raw Data", "insight": "AI analysis failed."}
         except Exception as e:
-            print(f"Erreur de parsing JSON pour l'analyse de graphique: {e}")
-            return {"chart_type": "list", "title": "Erreur d'Analyse", "insight": str(e)}
+            print(f"Error parsing JSON for chart analysis: {e}")
+            return {"chart_type": "list", "title": "Analysis Error", "insight": str(e)}

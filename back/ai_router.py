@@ -51,39 +51,41 @@ def convert_datetime_to_str(obj):
 # --- FIN DE LA FONCTION ---
 
 
+# --- FONCTION format_rag_context_from_hits (TRADUITE) ---
 def format_rag_context_from_hits(hits: list) -> str:
     """
-    Met en forme les résultats d'OpenSearch en un contexte clair pour le LLM.
+    Formats OpenSearch results into a clear context for the LLM.
     """
     if not hits:
-        return "Aucun contexte trouvé."
+        return "No context found." # TRADUIT
     
-    context_str = "Voici les incidents pertinents (contexte RAG) :\n\n"
+    context_str = "Here is the relevant incident context (RAG):\n\n" # TRADUIT
     
     for hit in hits:
         source = hit.get("_source", {})
-        context_str += "--- Début Incident ---\n"
-        context_str += f"ID Événement: {source.get('event_id')}\n"
+        context_str += "--- Start Incident ---\n" # TRADUIT
+        context_str += f"Event ID: {source.get('event_id')}\n" # TRADUIT
         context_str += f"Description: {source.get('description')}\n"
         
         if source.get('risks'):
-            context_str += "Risques identifiés:\n"
+            context_str += "Identified Risks:\n" # TRADUIT
             for risk in source['risks']:
-                context_str += f"  - {risk.get('name')} (Gravité: {risk.get('gravity')})\n"
+                context_str += f"  - {risk.get('name')} (Gravity: {risk.get('gravity')})\n"
         
         if source.get('corrective_measures'):
-            context_str += "Mesures correctives:\n"
+            context_str += "Corrective Measures:\n" # TRADUIT
             for measure in source['corrective_measures']:
                 context_str += f"  - {measure.get('name')}\n"
         
         if source.get('involved_employees'):
-            context_str += "Employés impliqués:\n"
+            context_str += "Involved Employees:\n" # TRADUIT
             for emp in source['involved_employees']:
                 context_str += f"  - {emp.get('name')} {emp.get('family_name')}\n"
                 
-        context_str += "--- Fin Incident ---\n\n"
+        context_str += "--- End Incident ---\n\n" # TRADUIT
         
     return context_str
+# --- FIN DE LA TRADUCTION ---
 
 
 @router.post("/query")
@@ -97,16 +99,16 @@ async def handle_ai_query(request: AIQueryRequest):
     if not bedrock_service:
         raise HTTPException(
             status_code=503, 
-            detail="Le service Bedrock n'est pas initialisé."
+            detail="Bedrock service is not initialized."
         )
 
     user_query = request.query
     
     try:
         # ÉTAPE 1: L'agent décide de l'outil
-        print(f"Agent: Décision pour la requête: '{user_query}'")
+        print(f"Agent: Deciding route for query: '{user_query}'")
         tool_choice = bedrock_service.decide_tool(user_query)
-        print(f"Agent: Outil choisi: {tool_choice}")
+        print(f"Agent: Tool chosen: {tool_choice}")
 
         if tool_choice == "sql":
             # --- ROUTE SQL (Text-to-SQL) ---
@@ -118,23 +120,22 @@ async def handle_ai_query(request: AIQueryRequest):
             try:
                 sql_results, columns = sql_service.execute_safe_sql(sql_query)
                 
-                # --- CORRECTION APPLIQUÉE ---
-                # Nettoyer les résultats AVANT json.dumps
+                print(f"Agent SQL: DB returned {len(sql_results)} row(s).")
+
                 serializable_results = convert_datetime_to_str(sql_results)
                 
                 context = json.dumps(serializable_results)
                 data_payload = {"columns": columns, "rows": serializable_results}
             
             except Exception as e:
-                # Cette exception (NameError) est ce qui se passait
-                print(f"Erreur lors de la sérialisation SQL: {repr(e)}")
-                context = json.dumps({"Erreur": str(e)})
+                print(f"Error during SQL serialization: {repr(e)}")
+                context = json.dumps({"Error": str(e)})
                 data_payload = None
 
             # ÉTAPE 4 (SQL): Générer la réponse finale
+            print("Agent SQL: Generating response...")
             ai_response = bedrock_service.generate_rag_response(context, user_query)
             
-            # Retourner la réponse ET les données brutes pour les diagrammes
             return {
                 "response": ai_response, 
                 "type": "sql", 
@@ -150,10 +151,13 @@ async def handle_ai_query(request: AIQueryRequest):
             search_results = search_semantic_incidents(os_client, INDEX_NAME, user_query, size=3)
             hits = search_results.get("hits", {}).get("hits", [])
 
+            print(f"Agent RAG: OpenSearch returned {len(hits)} hit(s).")
+
             # ÉTAPE 3 (RAG): Formater le contexte
             context = format_rag_context_from_hits(hits)
             
             # ÉTAPE 4 (RAG): Générer la réponse finale
+            print("Agent RAG: Generating response...")
             ai_response = bedrock_service.generate_rag_response(context, user_query)
             
             return {
@@ -164,5 +168,5 @@ async def handle_ai_query(request: AIQueryRequest):
 
     except Exception as e:
         error_message = repr(e)
-        print(f"Erreur majeure dans l'agent: {error_message}")
-        raise HTTPException(status_code=500, detail=f"Erreur de l'agent: {error_message}")
+        print(f"Major agent error: {error_message}")
+        raise HTTPException(status_code=500, detail=f"Agent error: {error_message}")

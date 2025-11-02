@@ -22,8 +22,8 @@ def get_database_schema() -> str:
     Construit une représentation textuelle du schéma de la BDD
     que le LLM peut comprendre (similaire à l'UML).
     """
-    print("Construction du schéma de la base de données pour le LLM (avec indices corrigés)...")
-    schema_str = "Schéma de la base de données PostgreSQL :\n\n"
+    print("Building database schema for LLM (with hints)...")
+    schema_str = "PostgreSQL Database Schema:\n\n"
     conn = None
     try:
         conn = get_db_connection()
@@ -43,16 +43,13 @@ def get_database_schema() -> str:
             for col in columns:
                 schema_str += f"  - {col['column_name']} ({col['data_type']})\n"
                 
-                # --- CORRECTION : Mise à jour des indices selon votre instruction ---
+                # --- Indices (maintenant en anglais) ---
                 if table_name == 'event' and col['column_name'] == 'type':
-                    # INJURY a été retiré d'ici
-                    schema_str += "    (Indices de valeurs: 'NEAR_MISS', 'CHEMICAL_SPILL', 'EQUIPMENT_FAILURE', 'FIRE_ALARM')\n"
+                    schema_str += "    (Value Hints: 'NEAR_MISS', 'CHEMICAL_SPILL', 'EQUIPMENT_FAILURE', 'FIRE_ALARM')\n"
                 if table_name == 'event' and col['column_name'] == 'classification':
-                    # INJURY a été ajouté ici
-                    schema_str += "    (Indices de valeurs: 'INJURY', 'EHS', 'ENVIRONMENT', 'OPERATIONS')\n"
+                    schema_str += "    (Value Hints: 'INJURY', 'EHS', 'ENVIRONMENT', 'OPERATIONS')\n"
                 if table_name == 'risk' and col['column_name'] == 'gravity':
-                    schema_str += "    (Indices de valeurs: 'Low', 'Medium', 'High', 'Critical')\n"
-                # --- FIN DES CORRECTIONS ---
+                    schema_str += "    (Value Hints: 'Low', 'Medium', 'High', 'Critical')\n"
 
             # Obtenir les clés étrangères (relations)
             cursor.execute("""
@@ -78,12 +75,12 @@ def get_database_schema() -> str:
             
             schema_str += "\n"
             
-        print("Schéma construit (avec indices corrigés).")
+        print("Schema built (with hints).")
         return schema_str
         
     except Exception as e:
-        print(f"Erreur lors de la construction du schéma: {e}")
-        return "Erreur: Impossible de récupérer le schéma."
+        print(f"Error building schema: {e}")
+        return "Error: Could not retrieve schema."
     finally:
         if conn:
             conn.close()
@@ -96,14 +93,14 @@ def execute_safe_sql(sql_query: str) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
     # SÉCURITÉ 1: Ne rien autoriser d'autre que SELECT
     if not sql_query.strip().upper().startswith("SELECT"):
-        raise ValueError("Requête non autorisée. Seules les requêtes SELECT sont permises.")
+        raise ValueError("Query not allowed. Only SELECT queries are permitted.")
         
     # SÉCURITÉ 2: Empêcher les requêtes trop volumineuses (bon pour les diagrammes)
     safe_query = sql_query
     if "LIMIT" not in sql_query.upper():
         safe_query += " LIMIT 200" # Limite par défaut
         
-    print(f"Exécution SQL sécurisée: {safe_query}")
+    print(f"Executing safe SQL: {safe_query}")
     
     conn = None
     try:
@@ -118,6 +115,6 @@ def execute_safe_sql(sql_query: str) -> Tuple[List[Dict[str, Any]], List[str]]:
         return results, columns
         
     except Exception as e:
-        print(f"Erreur lors de l'exécution SQL: {e}")
+        print(f"Error during SQL execution: {e}")
         # Renvoyer l'erreur pour que le LLM puisse la corriger
-        return [{"Erreur": str(e)}], []
+        return [{"Error": str(e)}], []  

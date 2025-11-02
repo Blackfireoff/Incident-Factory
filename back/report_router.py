@@ -51,41 +51,41 @@ def convert_datetime_to_str(obj):
     return obj
 # --- FIN DE LA FONCTION ---
 
-# --- FONCTION DE CONTEXTE RAG (copiée de ai_router.py) ---
+# --- FONCTION DE CONTEXTE RAG (TRADUITE) ---
 def format_rag_context_from_hits(hits: list) -> str:
     """
-    Met en forme les résultats d'OpenSearch en un contexte clair pour le LLM.
+    Formats OpenSearch results into a clear context for the LLM.
     """
     if not hits:
-        return "Aucun contexte trouvé."
+        return "No context found." # TRADUIT
     
-    context_str = "Voici les incidents pertinents (contexte RAG) :\n\n"
+    context_str = "Here is the relevant incident context (RAG):\n\n" # TRADUIT
     
     for hit in hits:
         source = hit.get("_source", {})
-        context_str += "--- Début Incident ---\n"
-        context_str += f"ID Événement: {source.get('event_id')}\n"
+        context_str += "--- Start Incident ---\n" # TRADUIT
+        context_str += f"Event ID: {source.get('event_id')}\n" # TRADUIT
         context_str += f"Description: {source.get('description')}\n"
         
         if source.get('risks'):
-            context_str += "Risques identifiés:\n"
+            context_str += "Identified Risks:\n" # TRADUIT
             for risk in source['risks']:
-                context_str += f"  - {risk.get('name')} (Gravité: {risk.get('gravity')})\n"
+                context_str += f"  - {risk.get('name')} (Gravity: {risk.get('gravity')})\n"
         
         if source.get('corrective_measures'):
-            context_str += "Mesures correctives:\n"
+            context_str += "Corrective Measures:\n" # TRADUIT
             for measure in source['corrective_measures']:
                 context_str += f"  - {measure.get('name')}\n"
         
         if source.get('involved_employees'):
-            context_str += "Employés impliqués:\n"
+            context_str += "Involved Employees:\n" # TRADUIT
             for emp in source['involved_employees']:
                 context_str += f"  - {emp.get('name')} {emp.get('family_name')}\n"
                 
-        context_str += "--- Fin Incident ---\n\n"
+        context_str += "--- End Incident ---\n\n" # TRADUIT
         
     return context_str
-# --- FIN DE LA FONCTION ---
+# --- FIN DE LA TRADUCTION ---
 
 
 @router.post("/report")
@@ -99,44 +99,44 @@ async def handle_ai_report(request: AIReportRequest):
     if not bedrock_service:
         raise HTTPException(
             status_code=503, 
-            detail="Le service Bedrock n'est pas initialisé."
+            detail="Bedrock service is not initialized."
         )
 
     user_query = request.query
     
     try:
         # --- NOUVELLE LOGIQUE : AGENT HYBRIDE ---
-        print(f"Agent Rapport: Décision pour la requête: '{user_query}'")
+        print(f"Report Agent: Deciding route for query: '{user_query}'")
         tool_choice = bedrock_service.decide_tool(user_query)
-        print(f"Agent Rapport: Outil choisi: {tool_choice}")
+        print(f"Report Agent: Tool chosen: {tool_choice}")
 
         if tool_choice == "sql":
             # --- ROUTE SQL (Pour les PDF de tableaux) ---
             
             # ÉTAPE 1: Générer le SQL
-            print(f"Agent Rapport: Génération SQL pour: '{user_query}'")
+            print(f"Report Agent: Generating SQL for: '{user_query}'")
             sql_query = bedrock_service.generate_sql_query(DB_SCHEMA, user_query)
             
             # ÉTAPE 2: Exécuter le SQL
-            print(f"Agent Rapport: Exécution: '{sql_query}'")
+            print(f"Report Agent: Executing: '{sql_query}'")
             try:
                 sql_results, columns = sql_service.execute_safe_sql(sql_query)
                 serializable_results = convert_datetime_to_str(sql_results)
                 data_payload = {"columns": columns, "rows": serializable_results}
                 
-                if serializable_results and "Erreur" in serializable_results[0]:
-                     raise HTTPException(status_code=400, detail=f"Erreur SQL: {serializable_results[0]['Erreur']}")
+                if serializable_results and "Error" in serializable_results[0]:
+                     raise HTTPException(status_code=400, detail=f"SQL Error: {serializable_results[0]['Error']}")
 
             except Exception as e:
-                print(f"Erreur lors de l'exécution/sérialisation SQL: {repr(e)}")
+                print(f"Error during SQL execution/serialization: {repr(e)}")
                 if isinstance(e, ValueError):
                     raise HTTPException(status_code=400, detail=str(e))
-                raise HTTPException(status_code=500, detail=f"Erreur SQL: {repr(e)}")
+                raise HTTPException(status_code=500, detail=f"SQL Error: {repr(e)}")
 
             # ÉTAPE 3: Générer le PDF de Tableau
-            print("Agent Rapport: Génération du PDF de tableau...")
+            print("Report Agent: Generating table PDF...")
             pdf_bytes = pdf_service.create_report_pdf(
-                title=f"Rapport de Données: {user_query}",
+                title=f"Data Report: {user_query}", # TRADUIT
                 query=sql_query,
                 data=data_payload
             )
@@ -156,9 +156,9 @@ async def handle_ai_report(request: AIReportRequest):
             ai_response_text = bedrock_service.generate_rag_response(context, user_query)
             
             # ÉTAPE 4: Générer le PDF de Texte
-            print("Agent Rapport: Génération du PDF de texte...")
+            print("Report Agent: Generating text PDF...")
             pdf_bytes = pdf_service.create_text_report_pdf(
-                title=f"Rapport d'Analyse: {user_query}",
+                title=f"Analysis Report: {user_query}", # TRADUIT
                 content=ai_response_text
             )
 
@@ -177,5 +177,5 @@ async def handle_ai_report(request: AIReportRequest):
         raise http_exc
     except Exception as e:
         error_message = repr(e)
-        print(f"Erreur majeure dans l'agent rapport: {error_message}")
-        raise HTTPException(status_code=500, detail=f"Erreur de l'agent: {error_message}")
+        print(f"Major report agent error: {error_message}")
+        raise HTTPException(status_code=500, detail=f"Agent error: {error_message}")

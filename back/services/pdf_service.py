@@ -15,8 +15,8 @@ def _header_footer(canvas, doc):
     canvas.saveState()
     canvas.setFont('Helvetica', 9)
     
-    # En-tête
-    header_text = "Rapport d'Incidents - FireTeams"
+    # En-tête (TRADUIT)
+    header_text = "Incident Report - FireTeams"
     canvas.drawString(inch, A4[1] - 0.5 * inch, header_text) # A4[1] est la hauteur
     
     # Pied de page (Numéro de page)
@@ -32,7 +32,6 @@ def create_report_pdf(title: str, query: str, data: Dict[str, Any]) -> bytes:
     """
     
     buffer = io.BytesIO()
-    # Utiliser 'landscape(A4)' (paysage) pour les tableaux larges
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), topMargin=0.75*inch, bottomMargin=0.75*inch, leftMargin=0.5*inch, rightMargin=0.5*inch)
     story = []
     
@@ -55,25 +54,24 @@ def create_report_pdf(title: str, query: str, data: Dict[str, Any]) -> bytes:
     styles['BodyText'].fontSize = 9
     styles.add(ParagraphStyle(name='SubTitle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.grey, spaceAfter=12))
     
-    # Ajout du contenu
+    # Ajout du contenu (TRADUIT)
     story.append(Paragraph(title, styles['Title']))
-    story.append(Paragraph(f"Date de génération: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['SubTitle']))
-    story.append(Paragraph('Requête de données', styles['Heading2']))
+    story.append(Paragraph(f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['SubTitle']))
+    story.append(Paragraph('Data Query', styles['Heading2']))
     story.append(Paragraph(query, styles['Code']))
-    story.append(Paragraph('Résultats', styles['Heading2']))
+    story.append(Paragraph('Results', styles['Heading2']))
 
     columns = data.get('columns', [])
     rows = data.get('rows', [])
 
     if not rows:
-        story.append(Paragraph('Aucune donnée trouvée pour cette requête.', styles['BodyText']))
+        story.append(Paragraph('No data found for this query.', styles['BodyText']))
     elif not columns:
-        story.append(Paragraph('Données reçues mais colonnes non définies.', styles['BodyText']))
+        story.append(Paragraph('Data received but columns are undefined.', styles['BodyText']))
     else:
         # Construction du tableau
         table_data = [columns]
         for row in rows:
-            # Tronquer les longues descriptions pour le PDF
             row_data = []
             for col in columns:
                 cell_value = str(row.get(col, ''))
@@ -127,9 +125,9 @@ def create_text_report_pdf(title: str, content: str) -> bytes:
     styles['BodyText'].leading = 14
     styles.add(ParagraphStyle(name='SubTitle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.grey, spaceAfter=12))
     
-    # Ajout du contenu
+    # Ajout du contenu (TRADUIT)
     story.append(Paragraph(title, styles['Title']))
-    story.append(Paragraph(f"Date de génération: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['SubTitle']))
+    story.append(Paragraph(f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['SubTitle']))
     story.append(Spacer(1, 0.25*inch))
     
     # Nettoyage du Markdown pour ReportLab
